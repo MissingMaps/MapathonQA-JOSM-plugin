@@ -14,6 +14,9 @@ mkdir -p build
 echo "Compiling..."
 javac --release 17 -cp lib/josm-tested.jar -d build src/*.java
 
+echo "Copying resources..."
+cp -r images build/images
+
 echo "Packaging..."
 jar cfm MapathonQA.jar MANIFEST.MF -C build .
 

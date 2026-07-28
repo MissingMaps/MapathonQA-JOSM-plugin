@@ -1,8 +1,8 @@
 Manifest-Version: 1.0
 Plugin-Class: org.openstreetmap.josm.plugins.mapathonqa.MapathonQAPlugin
 Plugin-Description: Post-mapathon data quality checker for Missing Maps mapathons
-Plugin-Icon: images/MM_logo.png
+Plugin-Icon: images/MM_logo.svg
 Plugin-Link: https://github.com/MissingMaps/MapathonQA-JOSM-plugin
-Plugin-Mainversion: 19396
+Plugin-Mainversion: 19555
 Plugin-Minimum-Java-Version: 17
 Plugin-Version: v1.0.2

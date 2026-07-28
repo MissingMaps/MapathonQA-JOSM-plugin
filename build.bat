@@ -17,6 +17,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo Copying resources...
+xcopy /Y /I /E images build\images >nul
+
 echo Packaging...
 jar cfm MapathonQA.jar MANIFEST.MF -C build .
 
