@@ -1,11 +1,24 @@
 # MapathonQA – JOSM Plugin
 
-Post-mapathon data quality checker for Missing Maps.
+Post-mapathon data quality checker. The goal of this plugin is to give a quick, rough overview of the data quality output after a mapathon and create a report that can be shared with mapathon organisers/trainers so they are aware which issues they should highlight next time during training. 
 
-## License
+## Workflow
 
-GPLv3 — see [`LICENSE`](LICENSE). JOSM core is "GPLv2 or later," which makes GPLv3 a compatible
-choice for plugins built against it.
+1. **MapathonQA → Run Full QA Check...**
+   - **Step 1 – Project & Time Window:** enter the mapathon name (optional), the HOT Tasking Manager project ID and the mapathon's UTC time window (defaults to the last 2 hours). Optionally tick "Include this report in MapathonQA_history.csv" to log the results in an Excel file for future tracking and comparing with later mapathons.
+   - Click **Find Mapathon Tasks →**. The plugin queries the HOT TM API for all tasks touched in that time window and builds a JOSM search query matching them.
+   - **Step 2 – Load & Select Tasks:** Click "Copy Search Query to Clipboard".
+2. Load the task grid into JOSM — happens automatically on **Close & Continue** if you leave the checkbox ticked.
+3. **Edit → Search (Ctrl+F)**, paste the copied search query to select the tasks touched during the mapathon's time window
+4. Download OSM data for the selected tasks using File → **Download Along...**
+5. **MapathonQA → Run QA on Current Layer** — runs the 7 checks against the downloaded data, <u>restricted to the mapathon's time window</u>. Flagged objects are selected in the editor, an HTML report is generated, and (if enabled in Step 1) a row is appended to the history CSV file.
+6. Review the flagged selection in JOSM, and share the HTML report with organisers/trainers.
+
+Other entry points from the menu:
+- **Generate Demo Report** — produces a sample HTML report with simulated issue counts, for previewing the report format without running it against real data.
+- **Set Report Save Folder...** — choose where reports and the history CSV are saved; if unset, falls back to your Downloads folder, then Desktop, then the home folder.
+- **Individual Checks submenu** — run any of the 7 report checks standalone against the whole current layer <u>with no time filter</u>
+- **3rdPass Checks (Not in Report) submenu** — extra checks for HOT TM Third Pass Validation; not part of the QA report.
 
 ## Credits
 
@@ -17,32 +30,31 @@ qeef: https://mapathoner.mapathon.cz/
 This plugin was built with the help of Claude, Anthropic's AI chatbot, used throughout for design,
 implementation, and debugging.
 
-## Build
+## Menu structure
 
-From this repo's root folder (needs JDK 17+):
+```
+MapathonQA
+├── Run Full QA Check...
+├── Run QA on Current Layer
+├── ───────────────
+├── Generate Demo Report
+├── Set Report Save Folder...
+├── ───────────────
+├── Individual Checks ▸
+│   ├── Select Non-yes Building Tags
+│   ├── Select Overlapping Buildings
+│   ├── Select Buildings on Highways
+│   ├── Select Non-orthogonal Buildings
+│   ├── Select Buildings with Layer Tag
+│   ├── Select Buildings with Shared Nodes
+│   └── Select Untagged Objects
+└── 3rdPass Checks (Not in Report) ▸
+    ├── Select Highway Classification Mismatch
+    ├── Select Residential With Multiple Place Nodes
+    └── Select Residential Without Highway
+```
 
-1. Download `josm-tested.jar` from https://josm.openstreetmap.de/josm-tested.jar into `lib/` (gitignored, not committed).
-2. **Windows:** `build.bat`
-   **Linux/Mac:** `./build.sh`
-
-This produces `MapathonQA.jar` in this folder — copy to JOSM's plugins folder and restart JOSM.
-
-## Critical JOSM API notes (learned from bytecode inspection)
-
-- Use `getRawTimestamp()` (returns int, Unix seconds) — NOT `getTimestamp()` (wrong return type in JOSM 19555)
-- Use `MainApplication.getLayerManager().getEditDataSet()` — NOT `getActiveDataLayer()`
-- Add menu items with `menuRoot.add(new JMenuItem(action))` — NOT `MainMenu.add()`
-- `addMenu()` signature: `(name, tooltip, mnemonic, position, helpId)`
-- `SimpleDateFormat` MUST use `sdf.setTimeZone(TimeZone.getTimeZone("UTC"))` — all times are UTC
-- `Way.getAngles()` (used by the non-orthogonal check) returns corner angles computed from
-  projected `EastNorth` coordinates — no manual lat/lon correction needed
-- `GeometryUtil`'s ray-casting/segment-intersection checks use raw lat/lon directly (no
-  projection correction — fine at the scale of a single building/task)
-- Building-vs-building overlap uses `Geometry.getAreaEastNorth()` + `Geometry.polygonIntersection(Area,
-  Area, 1.0E-4)` — the same public JOSM API and epsilon backing the built-in validator's own
-  "Overlapping buildings"/"Building inside building" MapCSS rules (`data/validator/geometry.mapcss`
-  in josm-tested.jar), so counts agree with JOSM's Validation Results panel instead of drifting from
-  a hand-rolled heuristic
+All items in both submenus run with no time filter, independent of the full QA Check/report.
 
 ## Architecture
 
@@ -69,45 +81,6 @@ This produces `MapathonQA.jar` in this folder — copy to JOSM's plugins folder 
 | `QAResults.java` | Data container for all check results |
 | `ReportWriter.java` | Generates branded HTML report (MM logo embedded as base64 SVG) |
 
-## Menu structure
-
-```
-MapathonQA
-├── Run Full QA Check...
-├── Run QA on Current Layer
-├── ───────────────
-├── Generate Demo Report
-├── Set Report Save Folder...
-├── ───────────────
-├── Individual Checks ▸
-│   ├── Select Non-yes Building Tags
-│   ├── Select Overlapping Buildings
-│   ├── Select Buildings on Highways
-│   ├── Select Non-orthogonal Buildings
-│   ├── Select Buildings with Layer Tag
-│   ├── Select Buildings with Shared Nodes
-│   └── Select Untagged Objects
-└── 3rdPass Checks (Not in Report) ▸
-    ├── Select Highway Classification Mismatch
-    ├── Select Residential With Multiple Place Nodes
-    └── Select Residential Without Highway
-```
-
-All items in both submenus run with no time filter (see Time filtering below) — they select
-matching objects in the whole current layer on demand, independent of the full QA pipeline/report.
-"Individual Checks" mirrors the 7 checks in the full report exactly (same logic, same thresholds),
-so running one standalone is a good way to spot-check or build trust in a specific check's result.
-"3rdPass Checks (Not in Report)" holds the three checks ported from
-[3rdPassJOSMPlugin](https://github.com/MissingMaps/3rdPassJOSMPlugin) — kept in their own submenu,
-named explicitly, so it's clear at a glance that these don't feed into the QA report/history CSV.
-
-## Time filtering
-
-All checks accept `(DataSet ds, Date since, Date until)`. Objects are only flagged if
-`getRawTimestamp() >= since && getRawTimestamp() <= until`. Objects with timestamp=0
-(unknown) are always included. The since/until dates are stored in `MapathonQAPlugin.lastStart`
-/ `lastEnd` (strings) and parsed as UTC in `RunQAOnCurrentLayerAction.parseStartTime()`.
-
 ## HOT TM API
 
 ```
@@ -117,31 +90,3 @@ GET https://tasking-manager-production-api.hotosm.org/api/v2/projects/{ID}/activ
 Returns latest action per task. Plugin filters by `actionDate` within the time window.
 All taskStatus values included (MAPPED, VALIDATED, INVALIDATED, BADIMAGERY, READY).
 Task grid loaded via OpenLocationAction reflection (tries 3 method signatures for compat).
-
-## Report
-
-`ReportWriter.write(QAResults)` generates a self-contained HTML file with:
-- Missing Maps logo embedded as base64 SVG (passed as constant string `LOGO_URI`)
-- Warm, mobile-responsive design (Nunito/Fraunces via Google Fonts, OKLCH accent color) with a
-  friendly "thank you for organising a mapathon" tone rather than a clinical report feel
-- Meta strip, two summary cards, issues table, recommendations
-- Saved to the folder configured via **MapathonQA → Set Report Save Folder...** (JOSM preference
-  `mapathonqa.reportDir`); if unset or invalid, falls back to ~/Downloads/, then Desktop, then home
-- Overlapping-buildings row note gets a trailing "N building(s) were duplicated." clause appended
-  only when `QAResults.overlappingBuildings.duplicateBuildingCount > 0` — no separate report row
-  or column for duplicates, they're folded into the existing overlap count/selection
-
-`ReportWriter.writeDemoReport(QAResults)` wraps `write()` and injects a blue demo banner.
-
-## History log
-
-Opt-in via a checkbox on the Step 1 (Project & Time Window) dialog of **Run Full QA Check...**
-— off by default, remembered as a JOSM preference (`mapathonqa.includeInHistory`) once set, so it
-applies to subsequent **Run QA on Current Layer** runs too. When enabled, `HistoryLogger.appendRow(QAResults)`
-appends one CSV row per real `Run QA on Current Layer`
-execution to `MapathonQA_history.csv`, in the same folder as HTML reports. The file is created
-with a header + UTF-8 BOM (so Excel renders it correctly) on first use, then only ever appended
-to — never overwritten — so a series of mapathons accumulates in one file that can be opened
-in Excel/Sheets to chart quality score, issue counts, etc. over time. Only wired into
-`RunQAOnCurrentLayerAction`, deliberately **not** called from `GenerateDemoReportAction` — demo
-runs use fake data and must not pollute the real history.
