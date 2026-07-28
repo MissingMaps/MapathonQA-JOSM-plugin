@@ -2,6 +2,8 @@
 
 Post-mapathon data quality checker. The goal of this plugin is to give a quick, rough overview of the data quality output after a mapathon and create a report that can be shared with mapathon organisers/trainers so they are aware which issues they should highlight next time during training. 
 
+"Run QA on Current Layer" detects only objects created/modified during the mapathon's time window, as defined in "Run Full QA Check". The Individual Checks submenu detects all objects.
+
 ## Workflow
 
 1. **MapathonQA → Run Full QA Check...**
@@ -11,13 +13,13 @@ Post-mapathon data quality checker. The goal of this plugin is to give a quick, 
 2. Load the task grid into JOSM — happens automatically on **Close & Continue** if you leave the checkbox ticked.
 3. **Edit → Search (Ctrl+F)**, paste the copied search query to select the tasks touched during the mapathon's time window
 4. Download OSM data for the selected tasks using File → **Download Along...**
-5. **MapathonQA → Run QA on Current Layer** — runs the 7 checks against the downloaded data, <u>restricted to the mapathon's time window</u>. Flagged objects are selected in the editor, an HTML report is generated, and (if enabled in Step 1) a row is appended to the history CSV file.
+5. **MapathonQA → Run QA on Current Layer** — runs the 7 checks against the downloaded data, <ins>restricted to the mapathon's time window</ins>. Flagged objects are selected in the editor, an HTML report is generated, and (if enabled in Step 1) a row is appended to the history CSV file.
 6. Review the flagged selection in JOSM, and share the HTML report with organisers/trainers.
 
 Other entry points from the menu:
 - **Generate Demo Report** — produces a sample HTML report with simulated issue counts, for previewing the report format without running it against real data.
 - **Set Report Save Folder...** — choose where reports and the history CSV are saved; if unset, falls back to your Downloads folder, then Desktop, then the home folder.
-- **Individual Checks submenu** — run any of the 7 report checks standalone against the whole current layer <u>with no time filter</u>
+- **Individual Checks submenu** — run any of the 7 report checks standalone against the whole current layer <ins>with no time filter</ins>
 - **3rdPass Checks (Not in Report) submenu** — extra checks for HOT TM Third Pass Validation; not part of the QA report.
 
 ## Credits
@@ -89,4 +91,3 @@ GET https://tasking-manager-production-api.hotosm.org/api/v2/projects/{ID}/activ
 
 Returns latest action per task. Plugin filters by `actionDate` within the time window.
 All taskStatus values included (MAPPED, VALIDATED, INVALIDATED, BADIMAGERY, READY).
-Task grid loaded via OpenLocationAction reflection (tries 3 method signatures for compat).
