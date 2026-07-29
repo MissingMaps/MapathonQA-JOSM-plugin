@@ -2,6 +2,7 @@ package org.openstreetmap.josm.plugins.mapathonqa;
 
 import java.awt.event.ActionEvent;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -22,6 +23,10 @@ import org.openstreetmap.josm.tools.I18n;
  *
  * FIX: Only counts a shared node if at least one of the involved
  * buildings was mapped during the mapathon time window.
+ *
+ * Uses Node.getParentWays() (JOSM's own live node-to-way index) instead of comparing
+ * every pair of buildings' node lists - turns an O(buildings^2 x nodes^2) scan into a
+ * single pass over each building's nodes, since JOSM already tracks which ways use a node.
  */
 public class CheckBuildingsWithSharedNodesAction extends AbstractAction {
 
@@ -72,50 +77,50 @@ public class CheckBuildingsWithSharedNodesAction extends AbstractAction {
         for (Way w : ds.getWays()) {
             if (w.isClosed() && w.hasKey("building")) buildings.add(w);
         }
-        List<Way> others = new ArrayList<>();
-        for (Way w : ds.getWays()) {
-            if (!w.hasKey("building")) others.add(w);
-        }
 
+        Set<Node> visited = new HashSet<>();
         Set<Node> sharedNodes = new LinkedHashSet<>();
         Set<OsmPrimitive> affectedBuildings = new LinkedHashSet<>();
-        int nb = buildings.size();
 
-        for (int i = 0; i < nb; i++) {
-            Way a = buildings.get(i);
-            boolean aInWindow = GeometryUtil.isMappedDuring(a, since, until);
+        for (Way bld : buildings) {
+            for (Node n : bld.getNodes()) {
+                if (n == null || !visited.add(n)) continue; // skip nulls and nodes already resolved via another building
 
-            // Check against other buildings
-            for (int j = i + 1; j < nb; j++) {
-                Way b = buildings.get(j);
-                boolean bInWindow = GeometryUtil.isMappedDuring(b, since, until);
-                // FIX: only count shared node if at least one building is in the mapathon window
-                if (!aInWindow && !bInWindow) continue;
+                List<Way> parents = n.getParentWays();
+                if (parents.size() < 2) continue; // only this one way uses the node - nothing shared
 
-                for (Node na : a.getNodes()) {
-                    if (na == null) continue;
-                    for (Node nb2 : b.getNodes()) {
-                        if (na == nb2) {
-                            sharedNodes.add(na);
-                            if (aInWindow) affectedBuildings.add(a);
-                            if (bInWindow) affectedBuildings.add(b);
-                        }
+                // Same building/other split the old buildings/others lists used, just applied
+                // to this node's actual parent ways instead of the whole dataset.
+                List<Way> pBuildings = new ArrayList<>();
+                List<Way> pOthers = new ArrayList<>();
+                for (Way p : parents) {
+                    if (p.isClosed() && p.hasKey("building")) pBuildings.add(p);
+                    else if (!p.hasKey("building")) pOthers.add(p);
+                }
+
+                boolean qualifies = false;
+                for (int x = 0; x < pBuildings.size(); x++) {
+                    Way a = pBuildings.get(x);
+                    boolean aInWindow = GeometryUtil.isMappedDuring(a, since, until);
+
+                    // Building-vs-building: counted if at least one side is in the mapathon window
+                    for (int y = x + 1; y < pBuildings.size(); y++) {
+                        Way b = pBuildings.get(y);
+                        boolean bInWindow = GeometryUtil.isMappedDuring(b, since, until);
+                        if (!aInWindow && !bInWindow) continue;
+                        qualifies = true;
+                        if (aInWindow) affectedBuildings.add(a);
+                        if (bInWindow) affectedBuildings.add(b);
+                    }
+
+                    // Building-vs-other: only counted if the building itself is in the window
+                    if (aInWindow && !pOthers.isEmpty()) {
+                        qualifies = true;
+                        affectedBuildings.add(a);
                     }
                 }
-            }
 
-            // Check against non-building ways
-            if (!aInWindow) continue; // skip if building not in window
-            for (Way other : others) {
-                for (Node na : a.getNodes()) {
-                    if (na == null) continue;
-                    for (Node no : other.getNodes()) {
-                        if (na == no) {
-                            sharedNodes.add(na);
-                            affectedBuildings.add(a);
-                        }
-                    }
-                }
+                if (qualifies) sharedNodes.add(n);
             }
         }
 
