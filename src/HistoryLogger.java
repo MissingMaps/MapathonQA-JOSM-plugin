@@ -29,7 +29,7 @@ public class HistoryLogger {
         "Buildings Checked", "Roads Checked", "Mappers", "Issue Mappers",
         "Non-yes Building Tags", "Overlapping Buildings", "Buildings on Roads", "Non-orthogonal Buildings",
         "Buildings with Layer Tag", "Shared Nodes", "Buildings with Shared Nodes", "Untagged Objects",
-        "Total Issues", "Objects without Issues", "Quality Score (%)", "Quality Label"
+        "Total Issues", "Objects without Issues"
     };
 
     public static File appendRow(QAResults r) throws IOException {
@@ -69,9 +69,7 @@ public class HistoryLogger {
             String.valueOf(r.buildingsWithSharedNodes.affectedBuildings.size()),
             String.valueOf(r.untaggedObjects.size()),
             String.valueOf(r.totalIssues()),
-            String.valueOf(r.cleanCount()),
-            String.format("%.0f", r.qualityScore()),
-            r.qualityLabel()
+            String.valueOf(r.cleanCount())
         };
     }
 

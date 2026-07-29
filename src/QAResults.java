@@ -39,21 +39,6 @@ public class QAResults {
     public int totalIssueOverride = -1; // if >= 0, used instead of allFlagged().size() (for demo)
     public int totalIssues() { return totalIssueOverride >= 0 ? totalIssueOverride : allFlagged().size(); }
 
-    public double qualityScore() {
-        int relevant = totalBuildings + totalHighways;
-        if (relevant == 0) return 100.0;
-        return Math.max(0.0, (1.0 - Math.min(totalIssues(), relevant) / (double) relevant) * 100.0);
-    }
-
-    public String qualityLabel() {
-        double q = qualityScore();
-        if (q >= 95) return "Excellent";
-        if (q >= 85) return "Good";
-        if (q >= 70) return "Acceptable";
-        if (q >= 50) return "Needs improvement";
-        return "Poor";
-    }
-
     // "Without issues" uses mapathon (in-window) counts when a time window was set, else totals
     public int mapathonFeatures() {
         return since != null ? (mapathonBuildings + mapathonHighways) : (totalBuildings + totalHighways);

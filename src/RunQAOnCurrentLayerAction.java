@@ -193,9 +193,7 @@ public class RunQAOnCurrentLayerAction extends AbstractAction {
                         + "  Untagged objects:            " + r.untaggedObjects.size() + "\n\n"
                         + "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
                         + "  Total issues:    " + total
-                        + " (created by " + r.issueMappers + " mapper" + (r.issueMappers == 1 ? "" : "s") + ")\n"
-                        + "  Quality score:   " + String.format("%.0f", r.qualityScore())
-                        + "% (" + r.qualityLabel() + ")\n\n"
+                        + " (created by " + r.issueMappers + " mapper" + (r.issueMappers == 1 ? "" : "s") + ")\n\n"
                         + (total > 0 ? "Flagged objects are selected in the editor.\n" : "\u2713 No issues found!\n")
                         + (reportFile != null ? "\nReport saved to:\n  " + reportFile.getAbsolutePath() : "")
                         + (historyFile != null ? "\nHistory log updated:\n  " + historyFile.getAbsolutePath() : "");
