@@ -199,6 +199,8 @@ public class RunFullQAAction extends AbstractAction {
             + "<p style='margin:6px 0 2px'><b>\u2139 Note on task detection:</b></p>"
             + "<p style='margin:2px 0'>Task IDs are based on the <b>most recent action date</b> per task. Tasks mapped during the mapathon but later re-validated or invalidated may show a different date and could fall outside the window.</p>"
             + "<p style='margin:2px 0'><b>Included task statuses:</b> MAPPED, VALIDATED, INVALIDATED, BADIMAGERY, READY \u2014 all statuses are included, the time window is the only filter.</p>"
+            + "<p style='margin:6px 0 2px'><b>\u26a0 Note on downloads:</b></p>"
+            + "<p style='margin:2px 0'><b>Download Along Way</b> doesn't always retrieve every object in the area. Before running the QA checks, visually check the downloaded data to make sure no area was missed.</p>"
             + "</body></html>";
         main.add(new JLabel(steps), gc);
 
