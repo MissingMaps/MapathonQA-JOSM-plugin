@@ -50,29 +50,43 @@ public class CheckOverlappingBuildingsAction extends AbstractAction {
         List<Way> buildings = new ArrayList<>();
         for (Way w : ds.getWays()) if (w.isClosed()&&w.hasKey("building")&&w.getNodesCount()>=4
                 && !"no".equals(w.get("building")) && !"entrance".equals(w.get("building"))) buildings.add(w);
+
+        // Index of each building in the list above, so a pair is only ever evaluated once
+        // (matching the old i<j loop) even though candidates now come from JOSM's spatial
+        // index instead of a plain scan of every other building.
+        Map<Way,Integer> indexOf = new IdentityHashMap<>();
+        for (int i=0;i<buildings.size();i++) indexOf.put(buildings.get(i), i);
+
         Set<OsmPrimitive> f = new LinkedHashSet<>();
         Set<OsmPrimitive> duplicates = new LinkedHashSet<>();
         int pairCount = 0;
-        int n=buildings.size();
-        for (int i=0;i<n;i++) { Way a=buildings.get(i); for (int j=i+1;j<n;j++) { Way b=buildings.get(j);
-            if (GeometryUtil.bboxDisjoint(a,b)) continue;
-            boolean dup = GeometryUtil.isExactDuplicate(a,b);
-            // Same classification JOSM's own validator uses for "Overlapping buildings" /
-            // "Building inside building" (Geometry.polygonIntersection on the two ways' Areas) -
-            // CROSSING is a true partial overlap, FIRST/SECOND_INSIDE is one fully containing the
-            // other. Both count here (this check folds both concepts into one row), but the
-            // CROSSING subset alone now matches JOSM's Validation Results count exactly, instead of
-            // the old segment/vertex heuristic which over-counted relative to it.
-            Geometry.PolygonIntersection classification = dup ? null : GeometryUtil.classifyOverlap(a,b);
-            boolean overlapping = classification == Geometry.PolygonIntersection.CROSSING
-                || classification == Geometry.PolygonIntersection.FIRST_INSIDE_SECOND
-                || classification == Geometry.PolygonIntersection.SECOND_INSIDE_FIRST;
-            if (dup || overlapping) {
-                OsmPrimitive flagged = null;
-                if (GeometryUtil.isMappedDuring(a,since,until)) flagged=a; else if (GeometryUtil.isMappedDuring(b,since,until)) flagged=b;
-                if (flagged!=null) { f.add(flagged); pairCount++; if (dup) duplicates.add(flagged); }
+
+        for (int i=0;i<buildings.size();i++) {
+            Way a = buildings.get(i);
+            // ds.searchWays() uses JOSM's own quadtree spatial index (QuadBuckets) to return only
+            // ways whose bbox is actually near `a`, instead of scanning every building in the layer.
+            for (Way b : ds.searchWays(a.getBBox())) {
+                Integer j = indexOf.get(b);
+                if (j == null || j <= i) continue; // not a counted building, or its pair with `a` was already handled from its own iteration
+                if (GeometryUtil.bboxDisjoint(a,b)) continue;
+                boolean dup = GeometryUtil.isExactDuplicate(a,b);
+                // Same classification JOSM's own validator uses for "Overlapping buildings" /
+                // "Building inside building" (Geometry.polygonIntersection on the two ways' Areas) -
+                // CROSSING is a true partial overlap, FIRST/SECOND_INSIDE is one fully containing the
+                // other. Both count here (this check folds both concepts into one row), but the
+                // CROSSING subset alone now matches JOSM's Validation Results count exactly, instead of
+                // the old segment/vertex heuristic which over-counted relative to it.
+                Geometry.PolygonIntersection classification = dup ? null : GeometryUtil.classifyOverlap(a,b);
+                boolean overlapping = classification == Geometry.PolygonIntersection.CROSSING
+                    || classification == Geometry.PolygonIntersection.FIRST_INSIDE_SECOND
+                    || classification == Geometry.PolygonIntersection.SECOND_INSIDE_FIRST;
+                if (dup || overlapping) {
+                    OsmPrimitive flagged = null;
+                    if (GeometryUtil.isMappedDuring(a,since,until)) flagged=a; else if (GeometryUtil.isMappedDuring(b,since,until)) flagged=b;
+                    if (flagged!=null) { f.add(flagged); pairCount++; if (dup) duplicates.add(flagged); }
+                }
             }
-        }}
+        }
         return new OverlapResult(f, duplicates.size(), pairCount);
     }
 }

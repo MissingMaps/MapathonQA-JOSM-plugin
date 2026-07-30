@@ -25,8 +25,9 @@ public class CheckBuildingsOnHighwaysAction extends AbstractAction {
     public static Set<OsmPrimitive> runOn(DataSet ds) { return runOn(ds, null, null); }
     public static Set<OsmPrimitive> runOn(DataSet ds, java.util.Date since) { return runOn(ds, since, null); }
     public static Set<OsmPrimitive> runOn(DataSet ds, java.util.Date since, java.util.Date until) {
-        List<Way> buildings=new ArrayList<>(), highways=new ArrayList<>();
-        for (Way w : ds.getWays()) { if (w.isClosed()&&w.hasKey("building")&&!"roof".equals(w.get("building"))&&w.getNodesCount()>=4) buildings.add(w); else if (w.hasKey("highway")) highways.add(w); }
+        List<Way> buildings=new ArrayList<>();
+        Set<Way> highwaySet = new HashSet<>();
+        for (Way w : ds.getWays()) { if (w.isClosed()&&w.hasKey("building")&&!"roof".equals(w.get("building"))&&w.getNodesCount()>=4) buildings.add(w); else if (w.hasKey("highway")) highwaySet.add(w); }
         Set<OsmPrimitive> f = new LinkedHashSet<>();
         // NOTE: a shared node does NOT mean "just touching, not crossing" - a building corner
         // accidentally snapped onto a highway node still shares that one node while the rest of
@@ -34,7 +35,13 @@ public class CheckBuildingsOnHighwaysAction extends AbstractAction {
         // highway node for containment (not just one), so shared nodes are intentionally not
         // special-cased here - see the identical fix in CheckOverlappingBuildingsAction.
         for (Way b : buildings) { if (!GeometryUtil.isMappedDuring(b,since,until)) continue;
-            for (Way h : highways) { if (GeometryUtil.bboxDisjoint(b,h)) continue; if (GeometryUtil.highwayCrossesBuilding(h,b)) { f.add(b); break; } }
+            // ds.searchWays() narrows the candidates to JOSM's own spatial index near `b`
+            // instead of scanning every highway in the layer.
+            for (Way h : ds.searchWays(b.getBBox())) {
+                if (!highwaySet.contains(h)) continue;
+                if (GeometryUtil.bboxDisjoint(b,h)) continue;
+                if (GeometryUtil.highwayCrossesBuilding(h,b)) { f.add(b); break; }
+            }
         }
         return f;
     }
