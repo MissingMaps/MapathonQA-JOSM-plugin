@@ -53,6 +53,7 @@ MapathonQA
 └── 3rdPass Checks (Not in Report) ▸
     ├── Select Highway Classification Mismatch
     ├── Select Residential With Multiple Place Nodes
+    ├── Select Hamlet/Village Tagging Mismatch
     └── Select Residential Without Highway
 ```
 
@@ -76,9 +77,10 @@ All items in both submenus run with no time filter, independent of the full QA C
 | `CheckBuildingsWithSharedNodesAction.java` | Check 6: shared nodes between buildings and other objects (menu: "Select Buildings with Shared Nodes") |
 | `CheckUntaggedWaysAction.java` | Check 7: untagged objects — ways, plus standalone untagged nodes not used as a way vertex (multipolygon members excluded) (menu: "Select Untagged Objects") |
 | `GeometryUtil.java` | Ray-casting, segment intersection, exact-duplicate detection, time filter, building-overlap classification via JOSM's own `Geometry.polygonIntersection` |
-| `ResidentialArea.java` | Collects landuse=residential areas (closed ways + multipolygon relations, outer/blank-role members stitched into rings; holes ignored) — shared by the two residential checks below |
+| `ResidentialArea.java` | Collects landuse=residential areas (closed ways + multipolygon relations, outer/blank-role members stitched into rings; holes ignored) — shared by the residential checks below. `getBBox()` lets checks query `DataSet.searchWays()/searchNodes()` (JOSM's spatial index) scoped to one area instead of scanning the whole layer |
 | `SelectResidentialWithoutHighwayAction.java` | Ported from 3rdPassMM: residential areas with no highway way touching/crossing them |
 | `SelectResidentialWithMultiplePlaceNodesAction.java` | Ported from 3rdPassMM: residential areas containing more than one `place=*` node |
+| `SelectHamletVillageTaggingMismatchAction.java` | Flags a `place=hamlet`/`place=village` node whose enclosing residential area's building count doesn't match: hamlet expects fewer than 15 buildings inside the area, village expects 15 or more |
 | `SelectHighwayClassificationMismatchAction.java` | Ported from 3rdPassMM: a highway way whose two endpoints each connect end-to-end to a different, but mutually consistent, `highway=` class (e.g. `path`–`unclassified`–`path`) |
 | `QAResults.java` | Data container for all check results |
 | `ReportWriter.java` | Generates branded HTML report (MM logo embedded as base64 SVG) |

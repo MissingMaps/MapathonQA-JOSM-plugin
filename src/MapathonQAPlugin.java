@@ -48,6 +48,7 @@ public class MapathonQAPlugin extends Plugin {
         JMenu thirdPassChecks = new JMenu(I18n.tr("3rdPass Checks (Not in Report)"));
         thirdPassChecks.add(new JMenuItem(new SelectHighwayClassificationMismatchAction()));
         thirdPassChecks.add(new JMenuItem(new SelectResidentialWithMultiplePlaceNodesAction()));
+        thirdPassChecks.add(new JMenuItem(new SelectHamletVillageTaggingMismatchAction()));
         thirdPassChecks.add(new JMenuItem(new SelectResidentialWithoutHighwayAction()));
         menuRoot.add(thirdPassChecks);
     }

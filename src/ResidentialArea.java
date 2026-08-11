@@ -3,6 +3,7 @@ package org.openstreetmap.josm.plugins.mapathonqa;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.openstreetmap.josm.data.osm.BBox;
 import org.openstreetmap.josm.data.osm.DataSet;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
@@ -109,5 +110,17 @@ final class ResidentialArea {
             }
         }
         return false;
+    }
+
+    /** Bounding box of this area's outer ring(s), for querying DataSet's spatial index instead
+     * of scanning every node/way in the whole layer against every area. */
+    BBox getBBox() {
+        BBox bbox = new BBox();
+        for (List<Node> ring : outerRings) {
+            for (Node n : ring) {
+                if (n != null && n.getCoor() != null) bbox.add(n.getCoor());
+            }
+        }
+        return bbox;
     }
 }
