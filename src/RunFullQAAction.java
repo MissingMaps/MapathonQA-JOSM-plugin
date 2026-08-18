@@ -25,6 +25,7 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JEditorPane;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -66,7 +67,7 @@ public class RunFullQAAction extends AbstractAction {
         gc.insets = new Insets(6, 4, 6, 4); gc.anchor = GridBagConstraints.WEST;
 
         gc.gridx=0; gc.gridy=0; gc.gridwidth=2;
-        main.add(new JLabel("<html><b>Mapathon Name</b> <small>(optional)</small></html>"), gc);
+        main.add(new JLabel(MapathonQAPlugin.html("<b>Mapathon Name</b> <small>(optional)</small>")), gc);
         gc.gridy=1; gc.gridwidth=1;
         gc.gridx=0; main.add(new JLabel("Name:"), gc);
         JTextField mapathonNameField = new JTextField(MapathonQAPlugin.lastMapathonName, 20);
@@ -74,7 +75,7 @@ public class RunFullQAAction extends AbstractAction {
         gc.gridx=1; main.add(mapathonNameField, gc);
 
         gc.gridx=0; gc.gridy=2; gc.gridwidth=2;
-        main.add(new JLabel("<html><b>HOT Tasking Manager Project ID</b></html>"), gc);
+        main.add(new JLabel(MapathonQAPlugin.html("<b>HOT Tasking Manager Project ID</b>")), gc);
         gc.gridy=3; gc.gridwidth=1;
         gc.gridx=0; main.add(new JLabel("Project ID:"), gc);
         JTextField projectIdField = new JTextField(
@@ -96,7 +97,7 @@ public class RunFullQAAction extends AbstractAction {
         String initialEnd   = !MapathonQAPlugin.lastEnd.isEmpty()   ? MapathonQAPlugin.lastEnd   : defaultEnd;
 
         gc.gridx=0; gc.gridy=4; gc.gridwidth=2;
-        main.add(new JLabel("<html><b>Mapathon Time Window (UTC)</b><br><small>Format: YYYY-MM-DD HH:MM</small></html>"), gc);
+        main.add(new JLabel(MapathonQAPlugin.html("<b>Mapathon Time Window (UTC)</b><br><small>Format: YYYY-MM-DD HH:MM</small>")), gc);
         gc.gridy=5; gc.gridwidth=1;
         gc.gridx=0; main.add(new JLabel("Start (UTC):"), gc);
         JTextField startField = new JTextField(initialStart, 16);
@@ -135,8 +136,7 @@ public class RunFullQAAction extends AbstractAction {
         dlg.setLayout(new BorderLayout());
         dlg.add(main, BorderLayout.CENTER);
         dlg.add(btns, BorderLayout.SOUTH);
-        dlg.pack();
-        dlg.setMinimumSize(dlg.getSize());
+        dlg.setSize(520, 400);
         dlg.setLocationRelativeTo(null);
         dlg.setVisible(true);
     }
@@ -168,7 +168,7 @@ public class RunFullQAAction extends AbstractAction {
     private void showStep2Dialog(int projectId, String start, String end, List<Integer> taskIds) {
         JDialog dlg = new JDialog((java.awt.Frame) null, "MapathonQA \u2013 Step 2: Load & Select Tasks", true);
         dlg.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-        dlg.setSize(840, 520);
+        dlg.setSize(840, 560);
         dlg.setLocationRelativeTo(null);
         bindEscapeToClose(dlg);
 
@@ -180,8 +180,8 @@ public class RunFullQAAction extends AbstractAction {
 
         gc.gridx=0; gc.gridy=0; gc.gridwidth=2;
         String summary = taskIds.isEmpty()
-            ? "<html><b style='color:#c62828'>No tasks found</b> mapped between "+start+" and "+end+" UTC.<br>Check the project ID and time window.</html>"
-            : "<html><b style='color:#2e7d32'>"+taskIds.size()+" task(s)</b> were mapped during the mapathon<br>(Project #"+projectId+", "+start+" \u2192 "+end+" UTC)</html>";
+            ? MapathonQAPlugin.html("<b style='color:#c62828'>No tasks found</b> mapped between "+start+" and "+end+" UTC.<br>Check the project ID and time window.")
+            : MapathonQAPlugin.html("<b style='color:#2e7d32'>"+taskIds.size()+" task(s)</b> were mapped during the mapathon<br>(Project #"+projectId+", "+start+" \u2192 "+end+" UTC)");
         main.add(new JLabel(summary), gc);
 
         String taskGridUrl = "https://tasking-manager-production-api.hotosm.org/api/v2/projects/"+projectId+"/tasks/?as_file=true&format=geojson";
@@ -193,24 +193,28 @@ public class RunFullQAAction extends AbstractAction {
             main.add(btnCopyQuery, gc);
         }
 
-        gc.gridy=2; gc.gridwidth=2; gc.fill=GridBagConstraints.HORIZONTAL;
+        gc.gridy=2; gc.gridwidth=2; gc.fill=GridBagConstraints.BOTH; gc.weighty=1.0;
         String steps = taskIds.isEmpty() ? "" :
-            "<html><body style='line-height:140%'><b>Next steps:</b><ol style='margin-left:16px'>"
-            + "<li style='margin-bottom:8px'>If you left the checkbox below ticked, the task grid will load automatically when you close this dialog.</li>"
-            + "<li style='margin-bottom:8px'>Use <b>Edit \u2192 Search (Ctrl+F)</b> and paste the search query you copied above to select the mapathon task squares</li>"
-            + "<li style='margin-bottom:8px'>Download OSM data for the selected tasks using the <b>Download Along Way</b> tool</li>"
+            "<html><body style='" + MapathonQAPlugin.LABEL_STYLE + " line-height:140%;'>"
+            + "<b>Next steps:</b><ol style='margin-left:16px'>"
+            + "<li style='margin-bottom:8px'>Click <b>Copy Search Query to Clipboard</b> above to copy the list of tasks mapped during the mapathon</li>"
+            + "<li style='margin-bottom:8px'>If you left the checkbox below ticked, the task grid will load automatically when you click the 'Close & Continue' button</li>"
+            + "<li style='margin-bottom:8px'>Use <b>Edit \u2192 Search (Ctrl+F)</b> and paste the search query you copied in step 1 to select the mapathon task squares</li>"
+            + "<li style='margin-bottom:8px'>Download OSM data for the selected tasks using  <b>File \u2192 Download Along Way</b> tool</li>"
             + "<li style='margin-bottom:8px'>Click <b>Run QA & Generate Report</b> from the MapathonQA menu</li>"
             + "</ol>"
-            + "<p style='margin:6px 0 2px'><b>\u2139 Note on task detection:</b></p>"
+            + "<div style='font-size:11px; color:#707070; margin-top:4px;'>"
+            + "<p style='margin:4px 0 2px'><b>\u2139 Note on task detection:</b></p>"
             + "<p style='margin:2px 0'>Task IDs are based on the <b>most recent action date</b> per task. Tasks mapped during the mapathon but later re-validated or invalidated may show a different date and could fall outside the window.</p>"
             + "<p style='margin:2px 0'><b>Included task statuses:</b> MAPPED, VALIDATED, INVALIDATED, BADIMAGERY, READY \u2014 all statuses are included, the time window is the only filter.</p>"
             + "<p style='margin:6px 0 2px'><b>\u26a0 Note on downloads:</b></p>"
             + "<p style='margin:2px 0'><b>Download Along Way</b> doesn't always retrieve every object in the area. Before running the QA checks, visually check the downloaded data to make sure no area was missed.</p>"
+            + "</div>"
             + "</body></html>";
-        main.add(new JLabel(steps), gc);
+        if (!taskIds.isEmpty()) main.add(wrappedHtml(steps, 750, 320), gc);
 
         JCheckBox chkLoad = new JCheckBox("Automatically load task grid into JOSM when closing", true);
-        gc.gridy=3;
+        gc.gridy=3; gc.fill=GridBagConstraints.HORIZONTAL; gc.weighty=0;
         if (!taskIds.isEmpty()) main.add(chkLoad, gc);
 
         JPanel btns = new JPanel();
@@ -336,7 +340,7 @@ public class RunFullQAAction extends AbstractAction {
 
     private void showManualLoadDialog(String url) {
         JPanel panel = new JPanel(new BorderLayout(8, 8));
-        panel.add(new JLabel("<html>Please load the task grid manually:<br><b>File \u2192 Open Location (Ctrl+L)</b> and paste:</html>"), BorderLayout.NORTH);
+        panel.add(new JLabel(MapathonQAPlugin.html("Please load the task grid manually:<br><b>File \u2192 Open Location (Ctrl+L)</b> and paste:")), BorderLayout.NORTH);
         JTextArea urlArea = new JTextArea(url);
         urlArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11)); urlArea.setEditable(false); urlArea.setLineWrap(true);
         panel.add(new JScrollPane(urlArea), BorderLayout.CENTER);
@@ -347,6 +351,32 @@ public class RunFullQAAction extends AbstractAction {
     }
 
     private int parseId(String text) { try { return Integer.parseInt(text.trim()); } catch (NumberFormatException e) { return -1; } }
+
+    /**
+     * A non-editable HTML view that word-wraps to a fixed {@code width x height} box.
+     * JLabel's HTML renderer ignores CSS width when embedded in a layout manager, so long
+     * lines spill past the dialog edge instead of wrapping. Pinning the JEditorPane inside a
+     * JScrollPane with a fixed viewport size and no horizontal scrollbar forces the viewport
+     * width - the one sizing mechanism Swing's HTML view reliably honors - and lets a
+     * vertical scrollbar absorb any overflow instead of stretching the dialog.
+     */
+    private static JComponent wrappedHtml(String html, int width, int height) {
+        JEditorPane pane = new JEditorPane("text/html", html);
+        pane.setEditable(false);
+        pane.setFocusable(false);
+        pane.setOpaque(false);
+        pane.setBorder(null);
+        pane.setCaretPosition(0); // otherwise the caret lands at the end of the HTML and the scrollpane opens scrolled to the bottom
+
+        JScrollPane scroll = new JScrollPane(pane);
+        scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scroll.setBorder(null);
+        scroll.setOpaque(false);
+        scroll.getViewport().setOpaque(false);
+        scroll.setPreferredSize(new java.awt.Dimension(width, height));
+        return scroll;
+    }
 
     private JDialog progressDialog(String msg) {
         JDialog dlg = new JDialog((java.awt.Frame) null, "MapathonQA \u2013 Please wait...", false);

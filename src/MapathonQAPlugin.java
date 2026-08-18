@@ -17,6 +17,14 @@ public class MapathonQAPlugin extends Plugin {
     public static String lastEnd    = "";
     public static String lastMapathonName = "";
 
+    /** Shared body style for HTML-formatted JLabels, so all plugin dialogs use the same font/size. */
+    static final String LABEL_STYLE = "font-family:sans-serif; font-size:12px;";
+
+    /** Wraps content in an {@code <html><body>} tag using the plugin's shared dialog font style. */
+    static String html(String bodyContent) {
+        return "<html><body style='" + LABEL_STYLE + "'>" + bodyContent + "</body></html>";
+    }
+
     public MapathonQAPlugin(PluginInformation info) {
         super(info);
 

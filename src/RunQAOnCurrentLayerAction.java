@@ -1,9 +1,14 @@
 package org.openstreetmap.josm.plugins.mapathonqa;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.File;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,6 +31,7 @@ import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.spi.preferences.Config;
 import org.openstreetmap.josm.tools.I18n;
+import org.openstreetmap.josm.tools.OpenBrowser;
 
 public class RunQAOnCurrentLayerAction extends AbstractAction {
 
@@ -175,34 +181,40 @@ public class RunQAOnCurrentLayerAction extends AbstractAction {
 
                     int total = r.totalIssues();
                     String nameInfo = (r.mapathonName != null && !r.mapathonName.trim().isEmpty())
-                        ? r.mapathonName.trim() + "\n" : "";
+                        ? ReportWriter.esc(r.mapathonName.trim()) + "<br>" : "";
                     String projInfo = projectId > 0
-                        ? "Project #" + projectId + "  |  " + start + " \u2192 " + end + " (UTC)\n\n"
+                        ? "Project #" + projectId + "  |  " + ReportWriter.esc(start) + " \u2192 " + ReportWriter.esc(end) + " (UTC)<br>"
                         : "";
-                    String summary =
-                        "QA complete\n" + nameInfo + projInfo
-                        + "  Mappers in time window:      " + r.totalMappers + "\n"
-                        + "  Buildings checked:           " + r.totalBuildings
-                        + (r.since != null ? " (during mapathon: " + r.mapathonBuildings + ")" : "") + "\n"
-                        + "  Highways checked:            " + r.totalHighways
-                        + (r.since != null ? " (during mapathon: " + r.mapathonHighways + ")" : "") + "\n\n"
-                        + "  Non-yes building tags:       " + r.nonYesBuildingTags.size() + "\n"
-                        + "  Overlapping buildings:       " + r.overlappingBuildings.size() + "\n"
-                        + "  Buildings on highways:       " + r.buildingsOnHighways.size() + "\n"
-                        + "  Non-orthogonal buildings:    " + r.nonOrthogonalBuildings.size() + "\n"
-                        + "  Buildings with layer tag:    " + r.buildingsWithLayerTag.size() + "\n"
-                        + "  Shared nodes (buildings):    " + r.buildingsWithSharedNodes.sharedNodeCount
-                        + " (" + r.buildingsWithSharedNodes.affectedBuildings.size() + " buildings)\n"
-                        + "  Untagged objects:            " + r.untaggedObjects.size() + "\n\n"
-                        + "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n"
-                        + "  Total issues:    " + total
-                        + " (created by " + r.issueMappers + " mapper" + (r.issueMappers == 1 ? "" : "s") + ")\n\n"
-                        + (total > 0 ? "Flagged objects are selected in the editor.\n" : "\u2713 No issues found!\n")
-                        + (reportFile != null ? "\nReport saved to:\n  " + reportFile.getAbsolutePath() : "")
-                        + (historyFile != null ? "\nHistory log updated:\n  " + historyFile.getAbsolutePath() : "");
+                    String summary = MapathonQAPlugin.html(
+                        "<div style='font-size:14px; font-weight:bold; margin-bottom:4px;'>Mapathon Quality Report generated</div>"
+                        + nameInfo + projInfo
+                        + "<br><table cellspacing='0' cellpadding='2' style='margin-left:8px;'>"
+                        + tableRow("Non-yes building tags:", r.nonYesBuildingTags.size())
+                        + tableRow("Overlapping buildings:", r.overlappingBuildings.size())
+                        + tableRow("Buildings on highways:", r.buildingsOnHighways.size())
+                        + tableRow("Non-orthogonal buildings:", r.nonOrthogonalBuildings.size())
+                        + tableRow("Buildings with layer tag:", r.buildingsWithLayerTag.size())
+                        + tableRow("Shared nodes:", r.buildingsWithSharedNodes.sharedNodeCount)
+                        + tableRow("Untagged objects:", r.untaggedObjects.size())
+                        + "<tr><td colspan='2'><hr></td></tr>"
+                        + "<tr><td><b>Total issues:</b></td><td align='right'><b>" + total
+                        + " (created by " + r.issueMappers + " mapper" + (r.issueMappers == 1 ? "" : "s") + ")</b></td></tr>"
+                        + "</table><br>"
+                        + (total > 0 ? "Flagged objects are selected in the editor.<br><br>" : "\u2713 No issues found!<br><br>")
+                        + (reportFile != null ? "<b>Report saved to:</b>" : ""));
 
-                    JOptionPane.showMessageDialog(null, summary, "MapathonQA \u2013 Results",
-                        total == 0 ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);
+                    List<Object> message = new ArrayList<>();
+                    message.add(new JLabel(summary));
+                    if (reportFile != null) {
+                        message.add(fileLink(reportFile));
+                    }
+                    if (historyFile != null) {
+                        message.add(new JLabel(MapathonQAPlugin.html("<br><b>History log updated:</b>")));
+                        message.add(fileLink(historyFile));
+                    }
+
+                    JOptionPane.showMessageDialog(null, message.toArray(), "MapathonQA \u2013 Results",
+                        JOptionPane.PLAIN_MESSAGE);
 
                 } catch (Exception ex) {
                     JOptionPane.showMessageDialog(null,
@@ -229,5 +241,27 @@ public class RunQAOnCurrentLayerAction extends AbstractAction {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private static String tableRow(String label, int value) {
+        return tableRow(label, String.valueOf(value));
+    }
+
+    private static String tableRow(String label, String value) {
+        return "<tr><td>" + ReportWriter.esc(label) + "</td><td align='right'>&nbsp;&nbsp;" + ReportWriter.esc(value) + "</td></tr>";
+    }
+
+    private static JLabel fileLink(File file) {
+        JLabel link = new JLabel(MapathonQAPlugin.html("<u>" + ReportWriter.esc(file.getAbsolutePath()) + "</u>"));
+        link.setForeground(new Color(0x1a73e8));
+        link.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        link.setToolTipText("Click to open in the default application");
+        link.setBorder(BorderFactory.createEmptyBorder(0, 16, 0, 0));
+        link.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                OpenBrowser.displayUrl(file.toURI());
+            }
+        });
+        return link;
     }
 }

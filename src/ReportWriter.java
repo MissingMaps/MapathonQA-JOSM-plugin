@@ -216,7 +216,7 @@ public class ReportWriter {
         w.write("<tr><td>" + esc(check) + "</td><td class=\'" + cls + "\'>" + countStr + "</td><td class=\'note\'>" + esc(notes) + "</td></tr>\n");
     }
 
-    private static String esc(String s) {
+    static String esc(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
