@@ -28,7 +28,6 @@ public class MapathonQAPlugin extends Plugin {
         menuRoot.add(new JMenuItem(new RunFullQAAction()));
         menuRoot.add(new JMenuItem(new RunQAOnCurrentLayerAction()));
         menuRoot.addSeparator();
-        menuRoot.add(new JMenuItem(new GenerateDemoReportAction()));
         menuRoot.add(new JMenuItem(new SetReportFolderAction()));
         menuRoot.addSeparator();
 
@@ -42,14 +41,5 @@ public class MapathonQAPlugin extends Plugin {
         individualChecks.add(new JMenuItem(new CheckBuildingsWithSharedNodesAction()));
         individualChecks.add(new JMenuItem(new CheckUntaggedWaysAction()));
         menuRoot.add(individualChecks);
-
-        // Ported from 3rdPassMM - kept in their own submenu (not mixed with the checks above)
-        // since these do NOT contribute to the QA report/RunQAOnCurrentLayerAction pipeline.
-        JMenu thirdPassChecks = new JMenu(I18n.tr("3rdPass Checks (Not in Report)"));
-        thirdPassChecks.add(new JMenuItem(new SelectHighwayClassificationMismatchAction()));
-        thirdPassChecks.add(new JMenuItem(new SelectResidentialWithMultiplePlaceNodesAction()));
-        thirdPassChecks.add(new JMenuItem(new SelectHamletVillageTaggingMismatchAction()));
-        thirdPassChecks.add(new JMenuItem(new SelectResidentialWithoutHighwayAction()));
-        menuRoot.add(thirdPassChecks);
     }
 }

@@ -45,7 +45,12 @@ public class RunFullQAAction extends AbstractAction {
 
     private static final String TM_API = "https://tasking-manager-production-api.hotosm.org/api/v2";
 
-    public RunFullQAAction() { super(I18n.tr("Run Full QA Check...")); }
+    public RunFullQAAction() {
+        super(I18n.tr("Find Mapathon Tasks..."));
+        putValue(SHORT_DESCRIPTION, I18n.tr("Optional: queries the HOT Tasking Manager for tasks touched during the "
+            + "mapathon''s time window and builds a search query to select/download them. Skip this if you already "
+            + "have the data loaded and just want to run QA."));
+    }
 
     @Override
     public void actionPerformed(ActionEvent e) { showStep1Dialog(); }
@@ -194,7 +199,7 @@ public class RunFullQAAction extends AbstractAction {
             + "<li style='margin-bottom:8px'>If you left the checkbox below ticked, the task grid will load automatically when you close this dialog.</li>"
             + "<li style='margin-bottom:8px'>Use <b>Edit \u2192 Search (Ctrl+F)</b> and paste the search query you copied above to select the mapathon task squares</li>"
             + "<li style='margin-bottom:8px'>Download OSM data for the selected tasks using the <b>Download Along Way</b> tool</li>"
-            + "<li style='margin-bottom:8px'>Click <b>Run QA on Current Layer</b> from the MapathonQA menu</li>"
+            + "<li style='margin-bottom:8px'>Click <b>Run QA & Generate Report</b> from the MapathonQA menu</li>"
             + "</ol>"
             + "<p style='margin:6px 0 2px'><b>\u2139 Note on task detection:</b></p>"
             + "<p style='margin:2px 0'>Task IDs are based on the <b>most recent action date</b> per task. Tasks mapped during the mapathon but later re-validated or invalidated may show a different date and could fall outside the window.</p>"

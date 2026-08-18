@@ -143,7 +143,6 @@ public class ReportWriter {
             + "<style>\n"
             + "* { box-sizing: border-box; margin: 0; padding: 0; }\n"
             + "body { font-family: \'Nunito\', Arial, sans-serif; background: oklch(0.97 0.015 70); color: oklch(0.28 0.02 60); font-size: 16px; line-height: 1.7; }\n"
-            + ".demo-banner { background: " + ACCENT + "; color: #fff; padding: 12px 24px; font-size: 13px; font-weight: 700; text-align: center; letter-spacing: 0.3px; }\n"
             + ".header { background: #fff; padding: 30px 44px; display: flex; align-items: center; gap: 26px; border-bottom: 1px solid oklch(0.93 0.015 70); }\n"
             + ".header img { height: 54px; display: block; }\n"
             + ".header-divider { width: 1px; height: 46px; background: oklch(0.9 0.01 70); }\n"
@@ -197,21 +196,6 @@ public class ReportWriter {
             + "  thead th, tbody td { padding: 10px 12px; font-size: 13px; }\n"
             + "}\n"
             + "</style>\n</head>\n<body>\n";
-    }
-
-    public static File writeDemoReport(QAResults r) throws IOException {
-        String ts = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        String filename = "MapathonQA_DEMO_" + ts + ".html";
-        File outDir = resolveOutputDir();
-        File out = new File(outDir, filename);
-
-        File tmp = write(r);
-        String html = new String(java.nio.file.Files.readAllBytes(tmp.toPath()), "UTF-8");
-        String banner = "<div class=\'demo-banner\'>Demonstration report &mdash; all figures are simulated, not real OSM data</div>\n";
-        html = html.replaceFirst("<div class=\'header\'>", banner + "<div class=\'header\'>");
-        try (java.io.FileWriter fw = new java.io.FileWriter(out)) { fw.write(html); }
-        tmp.delete();
-        return out;
     }
 
     static File resolveOutputDir() {
