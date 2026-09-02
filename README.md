@@ -4,6 +4,8 @@ Post-mapathon data quality checker. The goal of this plugin is to give a quick, 
 
 "Run QA & Generate Report" detects only objects created/modified during the mapathon's time window, as defined in "Find Mapathon Tasks...". If no time window defined (skipped Step 1) then it detects all objects. The Individual Checks submenu detects all objects as well.
 
+Video tutorial: [How to use the MapathonQA plugin](https://youtu.be/k_rTlTLqS7I)
+
 ## Workflow
 
 1. **MapathonQA → Find Mapathon Tasks...**
