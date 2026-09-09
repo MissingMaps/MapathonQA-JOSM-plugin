@@ -37,7 +37,7 @@ public class RunQAOnCurrentLayerAction extends AbstractAction {
 
     public RunQAOnCurrentLayerAction() {
         super(I18n.tr("Run QA & Generate Report"));
-        putValue(SHORT_DESCRIPTION, I18n.tr("Runs the 7 checks against the current layer and generates the HTML "
+        putValue(SHORT_DESCRIPTION, I18n.tr("Runs the 7 checks against the current layer and generates the PDF "
             + "report. Works on its own, but if you ran ''Find Mapathon Tasks...'' first, results are restricted "
             + "to the mapathon''s time window."));
     }
@@ -165,7 +165,7 @@ public class RunQAOnCurrentLayerAction extends AbstractAction {
                     try { reportFile = ReportWriter.write(r); }
                     catch (Exception ex) {
                         JOptionPane.showMessageDialog(null,
-                            "Could not write HTML report:\n" + ex.getMessage(),
+                            "Could not write the PDF report:\n" + ex.getMessage(),
                             "MapathonQA", JOptionPane.WARNING_MESSAGE);
                     }
 

@@ -41,7 +41,7 @@ public class SetReportFolderAction extends AbstractAction {
         gc.fill = GridBagConstraints.HORIZONTAL; gc.weightx = 1.0;
 
         gc.gridx=0; gc.gridy=0; gc.gridwidth=2;
-        main.add(new JLabel(MapathonQAPlugin.html("<b>Where should MapathonQA save HTML reports?</b><br>"
+        main.add(new JLabel(MapathonQAPlugin.html("<b>Where should MapathonQA save PDF reports?</b><br>"
             + "<span style='color:#555555'>Leave blank to use the default (Downloads folder, falling back to Desktop, then home).</span>")), gc);
 
         String current = Config.getPref().get(ReportWriter.PREF_REPORT_DIR, "");

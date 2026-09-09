@@ -1,0 +1,20 @@
+MapathonQA JOSM plugin
+Copyright (C) the MapathonQA contributors
+Licensed under the GNU General Public License v3.0 - see LICENSE.
+
+This product bundles the following third-party components. Each is redistributed
+unmodified and remains under its own licence.
+
+  OpenPDF <https://github.com/LibrePDF/OpenPDF>
+      PDF generation. Licensed under the GNU LGPL v2.1 and the Mozilla Public
+      License v2.0. Licence texts ship inside MapathonQA.jar under META-INF/
+      (LGPL-2.1.md, MPL-2.0.txt, APACHE-LICENSE-2.0.txt, LICENSES.md).
+
+  Nunito <https://github.com/googlefonts/nunito>
+  Fraunces <https://github.com/undercasetype/Fraunces>
+      Report typography. Both licensed under the SIL Open Font License v1.1.
+      Licence texts: fonts/NUNITO-OFL.txt and fonts/FRAUNCES-OFL.txt (also
+      bundled in MapathonQA.jar under fonts/).
+
+The GNU LGPL and Apache-2.0 are compatible with GPL-3.0, so the combined work is
+distributed under GPL-3.0 while each component keeps its own licence.

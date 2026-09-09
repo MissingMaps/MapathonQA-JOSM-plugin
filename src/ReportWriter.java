@@ -1,201 +1,611 @@
 package org.openstreetmap.josm.plugins.mapathonqa;
 
-import java.io.BufferedWriter;
+import java.awt.Color;
+import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
+import java.util.Locale;
 import java.util.TimeZone;
 
 import org.openstreetmap.josm.spi.preferences.Config;
 
+import com.lowagie.text.Chunk;
+import com.lowagie.text.Document;
+import com.lowagie.text.DocumentException;
+import com.lowagie.text.Element;
+import com.lowagie.text.Font;
+import com.lowagie.text.Image;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.Phrase;
+import com.lowagie.text.Rectangle;
+import com.lowagie.text.pdf.BaseFont;
+import com.lowagie.text.pdf.ColumnText;
+import com.lowagie.text.pdf.PdfContentByte;
+import com.lowagie.text.pdf.PdfPCell;
+import com.lowagie.text.pdf.PdfPCellEvent;
+import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfPageEventHelper;
+import com.lowagie.text.pdf.PdfTemplate;
+import com.lowagie.text.pdf.PdfWriter;
+
+/**
+ * Generates the branded MapathonQA quality report as a single self-contained PDF
+ * (OpenPDF). Fonts (Nunito + Fraunces, SIL OFL) and the Missing Maps logo are
+ * bundled in the plugin jar under /fonts and /images and embedded into the file,
+ * so the report renders identically offline on any viewer.
+ *
+ * Layout mirrors the previous HTML report: a white card system on a warm ground,
+ * a meta strip, two summary stat cards, the seven-check issues table, and a
+ * "handy tips" section. The report divides on a conceptual seam - page 1 is
+ * "how it went", the tips start on a fresh page when they would not fit.
+ */
 public class ReportWriter {
 
     public static final String PREF_REPORT_DIR = "mapathonqa.reportDir";
 
-    /** Brand/structural accent - project link, table header, tip-card border, footer link. */
-    private static final String ACCENT = "oklch(0.55 0.13 150)";
+    // ---- palette (sRGB approximations of the old report's oklch values) ----
+    private static final Color CREAM     = new Color(0xF7, 0xF4, 0xEF);
+    private static final Color WHITE     = Color.WHITE;
+    private static final Color INK       = new Color(0x40, 0x3D, 0x38);
+    private static final Color INK_HEAD  = new Color(0x41, 0x36, 0x2C);
+    private static final Color MUTE      = new Color(0x82, 0x7B, 0x71);
+    private static final Color MUTE_SOFT = new Color(0x6D, 0x66, 0x5D);
+    private static final Color HAIR      = new Color(0xE7, 0xE1, 0xD7);
+    private static final Color GREEN     = new Color(0x3C, 0x89, 0x5E);
+    private static final Color GREEN_DK  = new Color(0x2C, 0x79, 0x50);
+    private static final Color GREEN_BAR = new Color(0x5A, 0xAC, 0x7B);
+    private static final Color AMBER     = new Color(0xB9, 0x71, 0x28);
+    private static final Color AMBER_BAR = new Color(0xDC, 0x99, 0x42);
+    private static final Color AMBER_PILL= new Color(0xF5, 0xE8, 0xD6);
+    private static final Color PILL_BG   = new Color(0xDB, 0xE6, 0xF0);
+    private static final Color PILL_TX   = new Color(0x31, 0x56, 0x7C);
 
-    private static final String LOGO_URI = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDI3LjIuMCwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IlZyc3R2YV8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIKCSB2aWV3Qm94PSIwIDAgOTMxIDQ3Ni4yIiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCA5MzEgNDc2LjI7IiB4bWw6c3BhY2U9InByZXNlcnZlIj4KPHN0eWxlIHR5cGU9InRleHQvY3NzIj4KCS5zdDB7ZmlsbDpub25lO30KCS5zdDF7ZmlsbDojOUNDNjUzO30KCS5zdDJ7ZmlsbDojRTUyQTI0O30KCS5zdDN7ZmlsbDojRUQ3NzJCO30KCS5zdDR7ZmlsbDojRkVFODE5O30KCS5zdDV7ZmlsbDojNUVDMkVGO30KCS5zdDZ7ZmlsbDojMUQxRDFCO30KPC9zdHlsZT4KPHJlY3QgeT0iMCIgY2xhc3M9InN0MCIgd2lkdGg9IjkzMSIgaGVpZ2h0PSI0NzYuMiIvPgo8cGF0aCBjbGFzcz0ic3QxIiBkPSJNMTM4LjksMTM4LjRoMTgwQzI4OS43LDEwMi45LDI0NS4xLDgwLDE5NS4xLDgwYy0xOS44LDAtMzguNywzLjYtNTYuMSwxMC4xdjQ4LjNIMTM4LjlMMTM4LjksMTM4LjR6Ii8+CjxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik0yOTguNSwyNDMuM2gtMjYzYzAuOSwyOS43LDEwLjMsNTcuMywyNS42LDgwLjdoMjM3LjRWMjQzLjNMMjk4LjUsMjQzLjN6Ii8+CjxwYXRoIGNsYXNzPSJzdDMiIGQ9Ik0zMjcuNCwxNDkuOEgyMzF2ODIuMWgxMjMuNUMzNTMuMiwyMDEuNiwzNDMuNCwxNzMuNCwzMjcuNCwxNDkuOCIvPgo8cGF0aCBjbGFzcz0ic3Q0IiBkPSJNMzEwLjIsMjQzLjN2OTIuMkgxMzlWMzg2YzE3LjQsNi41LDM2LjQsMTAuMSw1Ni4xLDEwLjFjODYuMywwLDE1Ni42LTY3LjksMTU5LjQtMTUyLjdoLTQ0LjNWMjQzLjMKCUwzMTAuMiwyNDMuM3oiLz4KPHBhdGggY2xhc3M9InN0NSIgZD0iTTEyNy4zLDIzMS45Vjk1Qzc0LjgsMTE5LjQsMzgsMTcxLjMsMzUuNywyMzEuOUgxMjcuM3oiLz4KPHBvbHlnb24gY2xhc3M9InN0NiIgcG9pbnRzPSI0OTAuNCwyMDkuNSA0OTAuNCwxNDQuMyA0NjQuOCwxOTIuOSA0NTQuMywxOTIuOSA0MjguNywxNDQuMyA0MjguNywyMDkuNSA0MDkuNCwyMDkuNSA0MDkuNCwxMTEuMSAKCTQzMC4xLDExMS4xIDQ1OS41LDE2Ny4xIDQ4OS4xLDExMS4xIDUwOS43LDExMS4xIDUwOS43LDIwOS41ICIvPgo8cGF0aCBjbGFzcz0ic3Q2IiBkPSJNNTI4LjYsMTA4LjNoMTguOHYxOC40aC0xOC44VjEwOC4zeiBNNTI4LjYsMTM2LjloMTguOHY3Mi42aC0xOC44VjEzNi45TDUyOC42LDEzNi45eiIvPgo8cGF0aCBjbGFzcz0ic3Q2IiBkPSJNNTkyLDIxMC45Yy02LjIsMC0xMi4yLTEtMTgtMi45Yy01LjktMS45LTEwLjktNC43LTE1LjEtOC4zbDctMTEuNmM0LjUsMy4xLDguOCw1LjUsMTMuMSw3LjFzOC41LDIuNCwxMi43LDIuNAoJYzMuNywwLDYuNy0wLjcsOC44LTIuMXMzLjItMy40LDMuMi02cy0xLjMtNC41LTMuOC01LjdzLTYuNi0yLjYtMTIuMy00LjJjLTQuOC0xLjMtOC44LTIuNS0xMi4yLTMuN3MtNi4xLTIuNi04LjEtNC4xCglzLTMuNS0zLjMtNC41LTUuM3MtMS40LTQuNC0xLjQtNy4xYzAtMy43LDAuNy03LDIuMi0xMHMzLjUtNS41LDYuMS03LjZzNS43LTMuNyw5LjItNC44czcuMy0xLjcsMTEuNC0xLjdjNS41LDAsMTAuNywwLjgsMTUuNSwyLjQKCWM0LjgsMS42LDkuMiw0LjEsMTMuMiw3LjZsLTcuNiwxMS4yYy0zLjctMi44LTcuMy00LjgtMTAuOC02LjFzLTctMS45LTEwLjQtMS45Yy0zLjIsMC01LjgsMC42LTgsMS45Yy0yLjIsMS4zLTMuMiwzLjQtMy4yLDYuMgoJYzAsMS4zLDAuMywyLjQsMC44LDMuMnMxLjMsMS42LDIuNSwyLjJzMi42LDEuMyw0LjQsMS45YzEuOCwwLjYsNC4xLDEuMiw2LjgsMS45YzUsMS4zLDkuMywyLjYsMTMsMy45YzMuNiwxLjMsNi41LDIuOCw4LjgsNC40CgljMi4zLDEuNyw0LDMuNiw1LDUuOGMxLjEsMi4yLDEuNiw0LjgsMS42LDcuOGMwLDcuMS0yLjcsMTIuNy04LDE2LjhTNjAxLjEsMjEwLjksNTkyLDIxMC45Ii8+CjxwYXRoIGNsYXNzPSJzdDYiIGQ9Ik02NjEuNSwyMTAuOWMtNi4yLDAtMTIuMi0xLTE4LTIuOXMtMTAuOS00LjctMTUuMS04LjNsNy0xMS42YzQuNSwzLjEsOC44LDUuNSwxMy4xLDcuMXM4LjUsMi40LDEyLjcsMi40CgljMy43LDAsNi43LTAuNyw4LjgtMi4xczMuMi0zLjQsMy4yLTZzLTEuMy00LjUtMy44LTUuN3MtNi42LTIuNi0xMi4zLTQuMmMtNC44LTEuMy04LjgtMi41LTEyLjItMy43cy02LjEtMi42LTguMS00LjEKCXMtMy41LTMuMy00LjUtNS4zcy0xLjQtNC40LTEuNC03LjFjMC0zLjcsMC43LTcsMi4yLTEwczMuNS01LjUsNi4xLTcuNnM1LjctMy43LDkuMi00LjhzNy4zLTEuNywxMS40LTEuN2M1LjUsMCwxMC43LDAuOCwxNS41LDIuNAoJYzQuOCwxLjYsOS4yLDQuMSwxMy4yLDcuNmwtNy42LDExLjJjLTMuNy0yLjgtNy4zLTQuOC0xMC44LTYuMXMtNy0xLjktMTAuNC0xLjljLTMuMiwwLTUuOCwwLjYtOCwxLjljLTIuMiwxLjMtMy4yLDMuNC0zLjIsNi4yCgljMCwxLjMsMC4zLDIuNCwwLjgsMy4yczEuMywxLjYsMi41LDIuMnMyLjYsMS4zLDQuNCwxLjljMS44LDAuNiw0LjEsMS4yLDYuOCwxLjljNSwxLjMsOS4zLDIuNiwxMi45LDMuOWMzLjYsMS4zLDYuNSwyLjgsOC44LDQuNAoJYzIuMywxLjcsNCwzLjYsNSw1LjhjMS4xLDIuMiwxLjYsNC44LDEuNiw3LjhjMCw3LjEtMi43LDEyLjctOCwxNi44UzY3MC43LDIxMC45LDY2MS41LDIxMC45Ii8+CjxwYXRoIGNsYXNzPSJzdDYiIGQ9Ik03MDMuNCwxMDguM2gxOC44djE4LjRoLTE4LjhWMTA4LjN6IE03MDMuNCwxMzYuOWgxOC44djcyLjZoLTE4LjhWMTM2LjlMNzAzLjQsMTM2Ljl6Ii8+CjxwYXRoIGNsYXNzPSJzdDYiIGQ9Ik04MDcuMiwyMDkuNWgtMTguOHYtNDAuN2MwLTUuOC0xLTEwLjEtMy4xLTEyLjhzLTQuOS00LTguNS00Yy0xLjksMC0zLjgsMC40LTUuNywxLjFjLTIsMC43LTMuOCwxLjgtNS41LDMuMQoJcy0zLjMsMi45LTQuNyw0LjhzLTIuNCwzLjktMy4xLDYuMXY0Mi40SDczOXYtNzIuNmgxN3YxMy40YzIuNy00LjYsNi42LTguMiwxMS44LTEwLjhjNS4xLTIuNiwxMC45LTMuOSwxNy4zLTMuOQoJYzQuNiwwLDguMywwLjgsMTEuMiwyLjVzNS4xLDMuOCw2LjcsNi41YzEuNiwyLjcsMi43LDUuNywzLjMsOS4xYzAuNiwzLjQsMC45LDYuOSwwLjksMTAuNFYyMDkuNUw4MDcuMiwyMDkuNXoiLz4KPHBhdGggY2xhc3M9InN0NiIgZD0iTTg1Mi4zLDIwOS45Yy01LDAtOS40LTEtMTMuNC0yLjlzLTcuNS00LjYtMTAuNC04cy01LjItNy4zLTYuOC0xMS43cy0yLjQtOS4xLTIuNC0xNC4xCgljMC01LjMsMC44LTEwLjIsMi41LTE0LjdzNC04LjUsNy0xMS45czYuNi02LjEsMTAuOC04czguOC0yLjksMTMuOC0yLjljNS43LDAsMTAuNywxLjMsMTUsMy44czcuOCw1LjksMTAuNiwxMC4ydi0xMi44aDE2LjRWMjA2CgljMCw1LjQtMSwxMC4yLTMuMSwxNC40cy00LjksNy45LTguNSwxMC44Yy0zLjYsMy03LjksNS4yLTEyLjksNi44cy0xMC40LDIuNC0xNi4zLDIuNGMtOCwwLTE0LjgtMS4zLTIwLjItMy45cy0xMC4xLTYuNC0xNC4xLTExLjIKCWwxMC4yLTkuOGMyLjgsMy40LDYuMyw2LjEsMTAuNiw4YzQuMiwxLjksOC44LDIuOSwxMy41LDIuOWMyLjksMCw1LjctMC40LDguMy0xLjJjMi43LTAuOCw1LTIsNy4xLTMuN2MyLTEuNywzLjctMy44LDQuOC02LjQKCWMxLjItMi42LDEuOC01LjYsMS44LTkuMXYtOS4xYy0yLjQsNC4yLTUuOCw3LjQtMTAuMiw5LjZDODYyLDIwOC43LDg1Ny4zLDIwOS45LDg1Mi4zLDIwOS45IE04NTguNiwxOTVjMiwwLDQtMC4zLDUuOS0xCgljMS45LTAuNiwzLjYtMS41LDUuMi0yLjZjMS42LTEuMSwzLTIuNCw0LjItMy45czIuMS0zLjEsMi44LTQuN3YtMTcuM2MtMS43LTQuMi00LjMtNy43LTcuOS0xMC4yYy0zLjYtMi42LTcuMy0zLjktMTEuMy0zLjkKCWMtMi45LDAtNS41LDAuNi03LjgsMS45cy00LjMsMi45LTYsNXMtMyw0LjUtMy44LDcuMWMtMC45LDIuNy0xLjMsNS40LTEuMyw4LjNzMC41LDUuNywxLjUsOC4zczIuNSw0LjksNC4zLDYuOAoJYzEuOCwxLjksMy45LDMuNSw2LjQsNC42Qzg1MywxOTQuNSw4NTUuNywxOTUuMSw4NTguNiwxOTUiLz4KPHBvbHlnb24gY2xhc3M9InN0NiIgcG9pbnRzPSI0OTAuNCwzMzcuOSA0OTAuNCwyNzIuOCA0NjQuOCwzMjEuMyA0NTQuMywzMjEuMyA0MjguNywyNzIuOCA0MjguNywzMzcuOSA0MDkuNCwzMzcuOSA0MDkuNCwyMzkuNiAKCTQzMC4xLDIzOS42IDQ1OS41LDI5NS41IDQ4OS4xLDIzOS42IDUwOS43LDIzOS42IDUwOS43LDMzNy45ICIvPgo8cGF0aCBjbGFzcz0ic3Q2IiBkPSJNNTQ4LjYsMzM5LjNjLTMuNSwwLTYuOS0wLjYtOS45LTEuN2MtMy4xLTEuMS01LjctMi44LTgtNC45Yy0yLjItMi4xLTQtNC41LTUuMi03LjNzLTEuOS01LjgtMS45LTkuMQoJczAuOC02LjYsMi4zLTkuNXMzLjctNS40LDYuNC03LjRjMi44LTIsNi0zLjYsOS45LTQuOGMzLjgtMS4xLDgtMS43LDEyLjYtMS43YzMuMywwLDYuNSwwLjMsOS42LDAuOHM1LjksMS4zLDguMywyLjR2LTQuMgoJYzAtNC44LTEuNC04LjUtNC4xLTExLjFzLTYuOC0zLjktMTIuMi0zLjljLTMuOSwwLTcuOCwwLjctMTEuNSwyLjFzLTcuNiwzLjQtMTEuNSw2LjFsLTUuNy0xMS44YzkuNC02LjIsMTkuNi05LjMsMzAuNS05LjMKCXMxOC43LDIuNiwyNC42LDcuN3M4LjgsMTIuNSw4LjgsMjIuMnYyMi42YzAsMS45LDAuMywzLjMsMSw0LjJjMC43LDAuOCwxLjgsMS4zLDMuNCwxLjRWMzM4Yy0zLjIsMC42LTUuOSwxLTguMywxCgljLTMuNSwwLTYuMy0wLjgtOC4yLTIuNHMtMy4xLTMuNi0zLjYtNi4ybC0wLjQtNGMtMy4zLDQuMi03LjIsNy41LTExLjksOS43QzU1OC45LDMzOC4yLDU1My45LDMzOS4zLDU0OC42LDMzOS4zIE01NTMuOSwzMjUuOAoJYzMuMiwwLDYuMi0wLjUsOS0xLjdjMi44LTEuMSw1LjEtMi42LDYuNy00LjRjMi0xLjYsMy4xLTMuMywzLjEtNS4zdi04LjNjLTIuMi0wLjgtNC43LTEuNS03LjMtMnMtNS4xLTAuOC03LjYtMC44CgljLTQuOCwwLTguOCwxLjEtMTEuOSwzLjNzLTQuNiw0LjktNC42LDguMmMwLDMuMSwxLjIsNS44LDMuNiw3LjhDNTQ3LjQsMzI0LjcsNTUwLjQsMzI1LjgsNTUzLjksMzI1LjgiLz4KPHBhdGggY2xhc3M9InN0NiIgZD0iTTY1Mi44LDMzOS4zYy01LjgsMC0xMC44LTEuMy0xNS4xLTMuOHMtNy43LTYtMTAuMS0xMC4zdjQyLjNoLTE4LjhWMjY1LjNoMTYuNHYxMi41YzIuNy00LjIsNi4yLTcuNiwxMC41LTEwCgljNC4zLTIuNSw5LjItMy43LDE0LjgtMy43YzQuOSwwLDkuNSwxLDEzLjcsM3M3LjgsNC43LDEwLjgsOGMzLDMuNCw1LjQsNy40LDcuMSwxMS45YzEuNyw0LjYsMi42LDkuNCwyLjYsMTQuNXMtMC44LDEwLjItMi40LDE0LjgKCXMtMy44LDguNi02LjcsMTIuMWMtMi44LDMuNC02LjIsNi4xLTEwLjIsOEM2NjEuOCwzMzguNCw2NTcuNSwzMzkuMyw2NTIuOCwzMzkuMyBNNjQ2LjUsMzIzLjVjMi44LDAsNS40LTAuNiw3LjgtMS44CgljMi40LTEuMiw0LjQtMi44LDYuMS00LjljMS43LTIsMy00LjQsMy45LTcuMXMxLjQtNS41LDEuNC04LjNjMC0zLTAuNS01LjktMS41LTguNXMtMi41LTQuOS00LjMtNi45Yy0xLjgtMS45LTQtMy41LTYuNC00LjYKCWMtMi41LTEuMS01LjItMS43LTgtMS43Yy0xLjgsMC0zLjYsMC4zLTUuNSwwLjlzLTMuNiwxLjUtNS4yLDIuNmMtMS42LDEuMS0zLDIuNC00LjMsMy45cy0yLjIsMy4xLTIuOSw0Ljl2MTcKCWMxLjcsNC4yLDQuMiw3LjYsNy43LDEwLjNDNjM4LjgsMzIyLjIsNjQyLjUsMzIzLjUsNjQ2LjUsMzIzLjUiLz4KPHBhdGggY2xhc3M9InN0NiIgZD0iTTcyNS4zLDMzOS4zYy02LjIsMC0xMi4yLTEtMTgtMi45cy0xMC45LTQuNy0xNS4xLTguM2w3LTExLjZjNC41LDMuMSw4LjgsNS41LDEzLjEsNy4xCgljNC4yLDEuNiw4LjUsMi40LDEyLjcsMi40YzMuNywwLDYuNy0wLjcsOC44LTIuMWMyLjItMS40LDMuMi0zLjQsMy4yLTZzLTEuMy00LjUtMy44LTUuN3MtNi42LTIuNi0xMi4zLTQuMgoJYy00LjgtMS4zLTguOC0yLjUtMTIuMi0zLjdzLTYuMS0yLjYtOC4xLTQuMXMtMy41LTMuMy00LjUtNS4zYy0wLjktMi0xLjQtNC40LTEuNC03LjFjMC0zLjcsMC43LTcsMi4yLTEwczMuNS01LjUsNi4xLTcuNQoJYzIuNi0yLjEsNS43LTMuNyw5LjItNC44czcuMy0xLjcsMTEuNC0xLjdjNS41LDAsMTAuNywwLjgsMTUuNSwyLjRzOS4yLDQuMSwxMy4yLDcuNmwtNy42LDExLjJjLTMuNy0yLjgtNy4zLTQuOC0xMC44LTYuMQoJYy0zLjUtMS4zLTctMS45LTEwLjQtMS45Yy0zLjIsMC01LjgsMC42LTgsMS45cy0zLjIsMy40LTMuMiw2LjJjMCwxLjMsMC4zLDIuNCwwLjgsMy4yYzAuNSwwLjgsMS4zLDEuNiwyLjUsMi4yczIuNiwxLjMsNC40LDEuOQoJYzEuOCwwLjYsNC4xLDEuMiw2LjgsMS45YzUsMS4zLDkuMywyLjYsMTIuOSwzLjlzNi41LDIuOCw4LjgsNC40YzIuMywxLjcsNCwzLjYsNSw1LjhjMS4xLDIuMiwxLjYsNC44LDEuNiw3LjgKCWMwLDcuMS0yLjcsMTIuNy04LDE2LjhTNzM0LjUsMzM5LjMsNzI1LjMsMzM5LjMiLz4KPC9zdmc+Cg==";
+    private static BaseFont N_REG, N_SEMI, N_BOLD, N_XB, F_HEAD, F_NUM;
+
+    // =====================================================================
+    //  Public entry point
+    // =====================================================================
 
     public static File write(QAResults r) throws IOException {
         String ts = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
         String projectPart = r.projectId > 0 ? "project" + r.projectId : "standalone";
-        String filename = "MapathonQA_" + projectPart + "_" + ts + ".html";
-        File outDir = resolveOutputDir();
-        File out = new File(outDir, filename);
+        String filename = "MapathonQA_" + projectPart + "_" + ts + ".pdf";
+        File out = new File(resolveOutputDir(), filename);
 
-        int nonYes       = r.nonYesBuildingTags.size();
-        int overlap      = r.overlappingBuildings.size();
-        int onRoads      = r.buildingsOnHighways.size();
-        int nonOrtho     = r.nonOrthogonalBuildings.size();
-        int layerTag     = r.buildingsWithLayerTag.size();
-        int sharedNodes  = r.buildingsWithSharedNodes.sharedNodeCount;
-        int sharedBldgs  = r.buildingsWithSharedNodes.affectedBuildings.size();
-        int untagged     = r.untaggedObjects.size();
-        int total        = r.totalIssues();
-
-        int mapathonFeatures = r.mapathonFeatures();
-        int clean = r.cleanCount();
-        int issuesPct = mapathonFeatures > 0 ? Math.round(100f * total / mapathonFeatures) : 0;
-        int cleanPct  = mapathonFeatures > 0 ? Math.round(100f * clean / mapathonFeatures) : 100;
-
-        SimpleDateFormat generatedFmt = new SimpleDateFormat("yyyy-MM-dd HH:mm");
-        generatedFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
-        String generated = generatedFmt.format(new Date());
-
-        try (BufferedWriter w = new BufferedWriter(new FileWriter(out))) {
-            w.write(CSS());
-
-            // ── HEADER ──────────────────────────────────────────────
-            w.write("<div class=\'header\'>");
-            w.write("<img src=\'" + LOGO_URI + "\' alt=\'Missing Maps\'>");
-            w.write("<div class=\'header-divider\'></div>");
-            w.write("<div class=\'header-text\'>");
-            w.write("<h1>Thank you for organising a mapathon! 🗺️</h1>");
-            w.write("<p>Here's some friendly feedback on how it went and what to watch for next time</p>");
-            w.write("</div></div>\n");
-
-            w.write("<div class=\'page\'>\n");
-
-            // ── META ────────────────────────────────────────────────
-            w.write("<div class=\'meta-card\'>\n");
-            if (r.mapathonName != null && !r.mapathonName.trim().isEmpty()) {
-                w.write("<div class=\'meta-item\'><div class=\'label\'>Mapathon</div>");
-                w.write("<div class=\'value\'>" + esc(r.mapathonName.trim()) + "</div></div>\n");
-            }
-            if (r.projectId > 0) {
-                w.write("<div class=\'meta-item\'><div class=\'label\'>Project</div>");
-                w.write("<div class=\'value\'><a href=\'https://tasks.hotosm.org/projects/" + r.projectId + "\' target=\'_blank\'>#" + r.projectId + "</a></div></div>\n");
-            }
-            if (r.startTime != null && !r.startTime.isEmpty()) {
-                w.write("<div class=\'meta-item\'><div class=\'label\'>When</div>");
-                w.write("<div class=\'value\'>" + esc(r.startTime) + " &rarr; " + esc(r.endTime) + " (UTC)</div></div>\n");
-            }
-            w.write("<div class=\'meta-item\'><div class=\'label\'>Mappers</div>");
-            w.write("<div class=\'mappers-pill\'>" + r.totalMappers + " contributor" + (r.totalMappers == 1 ? "" : "s") + "</div></div>\n");
-            w.write("</div>\n");
-
-            // ── SUMMARY CARDS ────────────────────────────────────────
-            w.write("<div class=\'summary-strip\'>\n");
-            w.write("<div class=\'summary-card clear\'><div class=\'summary-num\'>" + cleanPct + "%</div>");
-            w.write("<div class=\'summary-label\'>" + clean + " object" + (clean == 1 ? "" : "s") + " came out clean &mdash; great mapping!</div></div>\n");
-            w.write("<div class=\'summary-card issues\'><div class=\'summary-num\'>" + issuesPct + "%</div><div>");
-            w.write("<div class=\'summary-label\'>" + total + " object" + (total == 1 ? "" : "s") + " have a little room to grow</div>");
-            if (total > 0) {
-                w.write("<div class=\'summary-sub\'>from " + r.issueMappers + " mapper" + (r.issueMappers == 1 ? "" : "s") + "</div>");
-            }
-            w.write("</div></div>\n");
-            w.write("</div>\n");
-
-            // ── ISSUES TABLE ─────────────────────────────────────────
-            w.write("<div class=\'card\'>\n<h2>A few things worth a second look</h2>\n");
-            w.write("<p class=\'lede\'>Nothing alarming here &mdash; just small tweaks that&#39;ll make the map even better.</p>\n");
-            w.write("<div class=\'table-wrap\'>\n<table><thead><tr><th>Check</th><th>Issues</th><th>Notes</th></tr></thead><tbody>\n");
-            row(w, "Buildings tagging", nonYes,
-                "Buildings tagged differently than building=yes.");
-            String overlapNote = "Buildings that geometrically overlap or are contained within another building (each count = one pair).";
-            int duplicates = r.overlappingBuildings.duplicateBuildingCount;
-            if (duplicates > 0) overlapNote += " " + duplicates + " building(s) were duplicated.";
-            row(w, "Overlapping buildings", overlap, overlapNote);
-            row(w, "Building outlines that cross a highway", onRoads,
-                "Building drawn through an existing highway.");
-            row(w, "Non-orthogonal buildings", nonOrtho,
-                "Rectangular buildings that most likely should be orthogonal with squared corners.");
-            row(w, "Buildings with layer tag", layerTag,
-                "Buildings tagged with layer=* created as recommendation from iD editor when two objects are overlapping. The correct solution is for the objects to not overlap.");
-            row(w, "Buildings with shared nodes", sharedNodes,
-                "Buildings sharing at least one node with another object (each count = one shared node, not a pair; " + sharedBldgs + " building(s) affected).");
-            row(w, "Untagged objects", untagged,
-                "Nodes and ways with no tags, most likely mappers forgot to add a tag such as building=yes.");
-            w.write("</tbody></table>\n</div>\n</div>\n");
-
-            // ── RECOMMENDATIONS ──────────────────────────────────────
-            w.write("<div class=\'card\'>\n<h2>Handy tips for your next mapathon</h2>\n");
-            w.write("<p class=\'lede\'>Quick reminders to make next time even smoother &mdash; you&#39;ve already got the hang of it!</p>\n");
-            w.write("<ul class=\'rec-list\'>\n");
-            if (total == 0) {
-                w.write("<li class=\'rec-item\'><strong>&#10003; No automated issues detected &mdash; great mapping!</strong></li>\n");
-            }
-            if (nonYes > 0)      w.write("<li class=\'rec-item\'><strong>Use building=yes for all buildings</strong><p>Unless the project instructions say otherwise or you have local knowledge of the area you are mapping.</p></li>\n");
-            if (overlap > 0)     w.write("<li class=\'rec-item\'><strong>Don&#39;t draw a new building overlapping an already existing one</strong><p>Try to draw each building separately. Zoom in and look for outlines already drawn in the area before tracing a new one.</p></li>\n");
-            if (onRoads > 0)     w.write("<li class=\'rec-item\'><strong>Do not draw buildings over highways</strong><p>Building outlines should sit beside highways, not on top of them.</p></li>\n");
-            if (nonOrtho > 0)    w.write("<li class=\'rec-item\'><strong>Square building corners after drawing</strong><p>Press &ldquo;Q&rdquo; in your mapping editor after drawing a rectangular building outline to straighten the corners. If mapping in JOSM, use the buildings_tools plugin which draws rectangular buildings automatically.</p></li>\n");
-            if (layerTag > 0)    w.write("<li class=\'rec-item\'><strong>Avoid using the layer tag on buildings</strong><p>When iD editor warns about overlapping objects it suggests adding layer=*. The correct fix is to move the object instead so it does not overlap, not to add a layer tag.</p></li>\n");
-            if (sharedNodes > 0) w.write("<li class=\'rec-item\'><strong>Do not snap buildings to highways or other buildings</strong><p>Each building should have its own independent nodes. In iD editor hold &ldquo;Alt&rdquo; (&ldquo;Ctrl&rdquo; in JOSM) to avoid snapping to existing nodes. If you accidentally connected nodes, use &ldquo;D&rdquo; in iD editor (&ldquo;G&rdquo; in JOSM) to unglue them and then adjust their position.</p></li>\n");
-            if (untagged > 0)    w.write("<li class=\'rec-item\'><strong>Always add tags to the nodes and ways you draw</strong><p>A node or way with no tags has no meaning in OpenStreetMap. If you drew a building outline, make sure to add building=yes before saving; if you placed a standalone node, tag it appropriately.</p></li>\n");
-            w.write("</ul>\n</div>\n");
-
-            w.write("<div class=\'footer\'>With thanks from <a href=\'https://www.missingmaps.org\'>Missing Maps</a> &mdash; keep mapping!<br>Generated " + generated + " (UTC)</div>\n");
-            w.write("</div>\n</body>\n</html>\n");
+        try (OutputStream os = new BufferedOutputStream(new FileOutputStream(out))) {
+            render(extract(r), os);
+        } catch (DocumentException e) {
+            throw new IOException("Could not build the PDF report: " + e.getMessage(), e);
         }
         return out;
     }
 
-    private static String CSS() {
-        return "<!DOCTYPE html>\n<html lang=\'en\'>\n<head>\n"
-            + "<meta charset=\'UTF-8\'>\n"
-            + "<meta name=\'viewport\' content=\'width=device-width, initial-scale=1\'>\n"
-            + "<title>Missing Maps Mapathon Quality Report</title>\n"
-            + "<link rel=\'preconnect\' href=\'https://fonts.googleapis.com\'>\n"
-            + "<link href=\'https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap\' rel=\'stylesheet\'>\n"
-            + "<style>\n"
-            + "* { box-sizing: border-box; margin: 0; padding: 0; }\n"
-            + "body { font-family: \'Nunito\', Arial, sans-serif; background: oklch(0.97 0.015 70); color: oklch(0.28 0.02 60); font-size: 16px; line-height: 1.7; }\n"
-            + ".header { background: #fff; padding: 30px 44px; display: flex; align-items: center; gap: 26px; border-bottom: 1px solid oklch(0.93 0.015 70); }\n"
-            + ".header img { height: 54px; display: block; }\n"
-            + ".header-divider { width: 1px; height: 46px; background: oklch(0.9 0.01 70); }\n"
-            + ".header-text h1 { font-family: \'Fraunces\', serif; font-size: 30px; font-weight: 600; color: oklch(0.3 0.03 50); }\n"
-            + ".header-text p { font-size: 14px; color: oklch(0.5 0.02 60); margin-top: 4px; }\n"
-            + ".page { max-width: 960px; margin: 0 auto; padding: 32px 24px 70px; }\n"
-            + ".meta-card { background: #fff; border-radius: 18px; padding: 22px 28px; margin-bottom: 22px; box-shadow: 0 2px 10px oklch(0.3 0.02 60 / 0.06); display: flex; flex-wrap: wrap; gap: 30px; }\n"
-            + ".meta-item .label { font-size: 11px; font-weight: 800; color: oklch(0.6 0.02 60); text-transform: uppercase; letter-spacing: 0.6px; }\n"
-            + ".meta-item .value { font-size: 15px; color: oklch(0.28 0.02 60); margin-top: 4px; }\n"
-            + ".meta-item .value a { color: " + ACCENT + "; text-decoration: none; }\n"
-            + ".meta-item .value a:hover { text-decoration: underline; }\n"
-            + ".mappers-pill { display: inline-block; margin-top: 3px; padding: 5px 14px; background: oklch(0.94 0.05 220); color: oklch(0.4 0.1 230); font-weight: 700; font-size: 13px; border-radius: 20px; }\n"
-            + ".summary-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 22px; }\n"
-            + ".summary-card { background: #fff; border-radius: 18px; padding: 26px 28px; box-shadow: 0 2px 10px oklch(0.3 0.02 60 / 0.06); border-top: 4px solid #ddd; display: flex; align-items: center; gap: 20px; }\n"
-            + ".summary-card.clear { border-top-color: oklch(0.6 0.13 150); }\n"
-            + ".summary-card.issues { border-top-color: oklch(0.6 0.13 50); }\n"
-            + ".summary-num { font-family: \'Fraunces\', serif; font-size: 44px; font-weight: 500; line-height: 1; flex-shrink: 0; }\n"
-            + ".summary-card.clear .summary-num { color: oklch(0.5 0.13 150); }\n"
-            + ".summary-card.issues .summary-num { color: oklch(0.55 0.13 50); }\n"
-            + ".summary-label { font-size: 14.5px; color: oklch(0.4 0.02 60); }\n"
-            + ".summary-sub { display: inline-block; margin-top: 8px; padding: 4px 12px; background: oklch(0.95 0.06 50); color: oklch(0.5 0.13 50); font-weight: 700; font-size: 12px; border-radius: 20px; }\n"
-            + ".card { background: #fff; border-radius: 18px; padding: 28px 30px; margin-bottom: 22px; box-shadow: 0 2px 10px oklch(0.3 0.02 60 / 0.06); }\n"
-            + ".card h2 { font-family: \'Fraunces\', serif; font-size: 20px; font-weight: 600; color: oklch(0.3 0.03 50); margin: 0 0 6px; }\n"
-            + ".card .lede { font-size: 14px; color: oklch(0.5 0.02 60); margin-bottom: 18px; }\n"
-            + "table { width: 100%; border-collapse: collapse; }\n"
-            + "thead th { background: " + ACCENT + "; color: #fff; padding: 12px 16px; text-align: left; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }\n"
-            + "thead th:first-child { border-radius: 10px 0 0 10px; }\n"
-            + "thead th:last-child { border-radius: 0 10px 10px 0; }\n"
-            + "tbody td { padding: 13px 16px; border-bottom: 1px solid oklch(0.95 0.01 70); font-size: 14px; vertical-align: top; }\n"
-            + "tbody tr:last-child td { border-bottom: none; }\n"
-            + ".count-ok { font-weight: 700; color: oklch(0.5 0.13 150); white-space: nowrap; }\n"
-            + ".count-warn { font-weight: 700; color: oklch(0.55 0.13 50); white-space: nowrap; }\n"
-            + ".note { color: oklch(0.5 0.02 60); font-size: 13px; }\n"
-            + ".rec-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }\n"
-            + ".rec-item { padding: 16px 18px; background: oklch(0.97 0.015 70); border-radius: 14px; border-left: 4px solid " + ACCENT + "; }\n"
-            + ".rec-item strong { display: block; font-size: 14.5px; color: oklch(0.3 0.03 50); margin-bottom: 3px; }\n"
-            + ".rec-item p { font-size: 13.5px; color: oklch(0.48 0.02 60); }\n"
-            + ".footer { text-align: center; color: oklch(0.6 0.02 60); font-size: 13px; margin-top: 30px; padding-top: 18px; border-top: 1px solid oklch(0.9 0.01 70); }\n"
-            + ".footer a { color: " + ACCENT + "; text-decoration: none; font-weight: 700; }\n"
-            + ".table-wrap { overflow-x: auto; }\n"
-            + "@media (max-width: 600px) {\n"
-            + "  .page { padding: 24px 16px 50px; }\n"
-            + "  .header { flex-direction: column; align-items: flex-start; padding: 22px 20px; gap: 12px; }\n"
-            + "  .header-divider { display: none; }\n"
-            + "  .header-text h1 { font-size: 22px; }\n"
-            + "  .header-text p { font-size: 13px; }\n"
-            + "  .meta-card, .card { padding: 20px 18px; }\n"
-            + "  .summary-strip { grid-template-columns: 1fr; }\n"
-            + "  .summary-card { padding: 20px 20px; gap: 16px; }\n"
-            + "  .summary-num { font-size: 36px; }\n"
-            + "  thead th, tbody td { padding: 10px 12px; font-size: 13px; }\n"
-            + "}\n"
-            + "</style>\n</head>\n<body>\n";
+    // =====================================================================
+    //  Data extraction (keeps rendering free of JOSM types, and testable)
+    // =====================================================================
+
+    static final class Data {
+        String mapathonName;
+        int projectId;
+        String startTime, endTime;
+        int totalMappers, issueMappers;
+        int mapathonFeatures, totalIssues, clean, cleanPct, issuesPct;
+        int nonYes, overlap, duplicates, onRoads, nonOrtho, layerTag, sharedNodes, sharedBldgs, untagged;
+        String generatedUtc;
+    }
+
+    static Data extract(QAResults r) {
+        Data d = new Data();
+        d.mapathonName    = r.mapathonName;
+        d.projectId       = r.projectId;
+        d.startTime       = r.startTime;
+        d.endTime         = r.endTime;
+        d.totalMappers    = r.totalMappers;
+        d.issueMappers    = r.issueMappers;
+        d.mapathonFeatures = r.mapathonFeatures();
+        d.totalIssues     = r.totalIssues();
+        d.clean           = r.cleanCount();
+        d.cleanPct        = d.mapathonFeatures > 0 ? Math.round(100f * d.clean / d.mapathonFeatures) : 100;
+        d.issuesPct       = d.mapathonFeatures > 0 ? Math.round(100f * d.totalIssues / d.mapathonFeatures) : 0;
+        d.nonYes          = r.nonYesBuildingTags.size();
+        d.overlap         = r.overlappingBuildings.size();
+        d.duplicates      = r.overlappingBuildings.duplicateBuildingCount;
+        d.onRoads         = r.buildingsOnHighways.size();
+        d.nonOrtho        = r.nonOrthogonalBuildings.size();
+        d.layerTag        = r.buildingsWithLayerTag.size();
+        d.sharedNodes     = r.buildingsWithSharedNodes.sharedNodeCount;
+        d.sharedBldgs     = r.buildingsWithSharedNodes.affectedBuildings.size();
+        d.untagged        = r.untaggedObjects.size();
+
+        SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd HH:mm");
+        f.setTimeZone(TimeZone.getTimeZone("UTC"));
+        d.generatedUtc = f.format(new Date());
+        return d;
+    }
+
+    // =====================================================================
+    //  Rendering
+    // =====================================================================
+
+    static void render(Data d, OutputStream out) throws IOException, DocumentException {
+        loadFonts();
+
+        Document doc = new Document(PageSize.A4, 44, 44, 44, 58);
+        PdfWriter writer = PdfWriter.getInstance(doc, out);
+        writer.setPageEvent(new Chrome(d.generatedUtc));
+        doc.open();
+
+        float cw = doc.getPageSize().getWidth() - 88f;
+        int total = d.totalIssues;
+        Image tick = checkMark(writer);
+
+        // ---- header ----
+        PdfPTable hIn = new PdfPTable(new float[]{ 70f, cw - 70f - 14f });
+        hIn.setWidthPercentage(100);
+        Image logo = image("/images/MM_logo_circle.png");
+        logo.scaleToFit(60f, 60f);
+        PdfPCell lc = new PdfPCell(logo, false);
+        lc.setBorder(Rectangle.NO_BORDER);
+        lc.setHorizontalAlignment(Element.ALIGN_LEFT);
+        lc.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        hIn.addCell(lc);
+        PdfPCell ht = new PdfPCell();
+        ht.setBorder(Rectangle.NO_BORDER);
+        ht.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        ht.setPaddingLeft(2f);
+        Paragraph h1 = new Paragraph("Thank you for organising a mapathon!", f(F_HEAD, 17.5f, INK_HEAD));
+        h1.setLeading(20f);
+        Paragraph h2 = new Paragraph(
+                "Here’s some friendly feedback on how it went, and a few things to watch for next time.",
+                f(N_REG, 9.6f, MUTE));
+        h2.setLeading(13f);
+        h2.setSpacingBefore(3.5f);
+        ht.addElement(h1);
+        ht.addElement(h2);
+        hIn.addCell(ht);
+        doc.add(wrapCard(cw, hIn, 18f, 15f, 8f));
+
+        // ---- meta: only the fields that have a value, like the old report ----
+        List<PdfPCell> metaCells = new ArrayList<>();
+        List<Float> metaW = new ArrayList<>();
+
+        if (notBlank(d.mapathonName)) {
+            metaCells.add(metaCell("MAPATHON", new Phrase(d.mapathonName.trim(), f(N_REG, 10.5f, INK))));
+            metaW.add(1.7f);
+        }
+        if (d.projectId > 0) {
+            Chunk pj = new Chunk("#" + d.projectId, f(N_SEMI, 10.5f, GREEN));
+            pj.setAnchor("https://tasks.hotosm.org/projects/" + d.projectId);
+            metaCells.add(metaCell("PROJECT", new Phrase(pj)));
+            metaW.add(0.7f);
+        }
+        if (notBlank(d.startTime)) {
+            metaCells.add(metaCell("WHEN", whenPhrase(d.startTime, d.endTime, f(N_REG, 10.5f, INK))));
+            metaW.add(1.95f);
+        }
+        Chunk pill = new Chunk(d.totalMappers + (d.totalMappers == 1 ? " contributor" : " contributors"),
+                f(N_BOLD, 9f, PILL_TX));
+        pill.setBackground(PILL_BG, 5f, 3f, 5f, 4f);
+        Paragraph pillP = new Paragraph(pill);
+        pillP.setLeading(15f);
+        metaCells.add(metaCell("MAPPERS", pillP));
+        metaW.add(1.0f);
+
+        // when only a couple of fields are shown, a trailing spacer keeps them
+        // packed to the left instead of stretched across the whole card
+        if (metaCells.size() < 4) {
+            metaCells.add(new PdfPCell());
+            metaCells.get(metaCells.size() - 1).setBorder(Rectangle.NO_BORDER);
+            metaW.add(Math.max(1.2f, (4 - metaW.size()) * 1.4f));
+        }
+
+        float[] w = new float[metaW.size()];
+        for (int i = 0; i < w.length; i++) w[i] = metaW.get(i);
+        PdfPTable meta = new PdfPTable(w.length);
+        meta.setWidthPercentage(100);
+        meta.setWidths(w);
+        for (PdfPCell c : metaCells) meta.addCell(c);
+        doc.add(wrapCard(cw, meta, 16f, 12f, 10f));
+
+        // ---- summary strip ----
+        PdfPTable strip = new PdfPTable(2);
+        strip.setWidthPercentage(100);
+        strip.setWidths(new float[]{ 1f, 1f });
+
+        String cleanMain = nf(d.clean) + (d.clean == 1 ? " object came" : " objects came")
+                + " out clean — great mapping!";
+        strip.addCell(summaryCell(d.cleanPct, GREEN_DK, cleanMain, null, null, null, GREEN_BAR, 0f, 6.5f));
+
+        String issueMain = total == 0
+                ? "nothing flagged by the automated checks"
+                : nf(total) + (total == 1 ? " object has" : " objects have") + " a little room to grow";
+        String issueSub = total > 0
+                ? "from " + d.issueMappers + (d.issueMappers == 1 ? " mapper" : " mappers")
+                : null;
+        strip.addCell(summaryCell(d.issuesPct, AMBER, issueMain, issueSub, AMBER_PILL, AMBER, AMBER_BAR, 6.5f, 0f));
+        strip.setSpacingAfter(10f);
+        doc.add(strip);
+
+        // ---- issues table ----
+        float[] tblCols = { 1.95f, 0.8f, 2.85f };
+
+        PdfPTable body = new PdfPTable(1);
+        body.setWidthPercentage(100);
+        body.addCell(sectionHead("A few things worth a second look",
+                "Nothing alarming here — just small tweaks that’ll make the map even better."));
+
+        // The green "CHECK / ISSUES / NOTES" bar, drawn as an image so it renders
+        // reliably at this nesting depth (cell backgrounds and events on a deeply
+        // nested table do not paint in OpenPDF).
+        PdfPCell barRow = new PdfPCell(headerBar(writer, cw - 34f, tblCols), false);
+        barRow.setBorder(Rectangle.NO_BORDER);
+        barRow.setPadding(0f);
+        barRow.setPaddingTop(12f);
+        barRow.setPaddingBottom(3f);
+        body.addCell(barRow);
+
+        PdfPTable tbl = new PdfPTable(tblCols);
+        tbl.setWidthPercentage(100);
+
+        String overlapNote = "Buildings that geometrically overlap or are contained within another building "
+                + "(each count = one pair).";
+        if (d.duplicates > 0) overlapNote += " " + d.duplicates + " building(s) were duplicated.";
+
+        row(tbl, tick, "Buildings tagging", d.nonYes,
+            "Buildings tagged differently than building=yes.", false);
+        row(tbl, tick, "Overlapping buildings", d.overlap, overlapNote, false);
+        row(tbl, tick, "Building outlines that cross a highway", d.onRoads,
+            "Building drawn through an existing highway.", false);
+        row(tbl, tick, "Non-orthogonal buildings", d.nonOrtho,
+            "Rectangular buildings that most likely should be orthogonal with squared corners.", false);
+        row(tbl, tick, "Buildings with layer tag", d.layerTag,
+            "Buildings tagged with layer=* created as recommendation from iD editor when two objects are "
+            + "overlapping. The correct solution is for the objects to not overlap.", false);
+        row(tbl, tick, "Buildings with shared nodes", d.sharedNodes,
+            "Buildings sharing at least one node with another object (each count = one shared node, not a "
+            + "pair; " + d.sharedBldgs + " building(s) affected).", false);
+        row(tbl, tick, "Untagged objects", d.untagged,
+            "Nodes and ways with no tags, most likely mappers forgot to add a tag such as building=yes.", true);
+
+        PdfPCell tblWrap = new PdfPCell(tbl);
+        tblWrap.setBorder(Rectangle.NO_BORDER);
+        tblWrap.setPadding(0f);
+        body.addCell(tblWrap);
+
+        if (total == 0) {
+            Paragraph allClear = new Paragraph("Every check passed — keep up the great mapping!",
+                    f(N_BOLD, 9.5f, GREEN_DK));
+            allClear.setAlignment(Element.ALIGN_CENTER);
+            allClear.setSpacingBefore(13f);
+            PdfPCell ac = new PdfPCell();
+            ac.setBorder(Rectangle.NO_BORDER);
+            ac.setPadding(0f);
+            ac.addElement(allClear);
+            body.addCell(ac);
+        }
+        doc.add(wrapCard(cw, body, 17f, 15f, 9f));
+
+        // ---- recommendations ----
+        // Only when something was flagged - a clean run doesn't need tips, and the
+        // 100% card plus the line above already say "great mapping". When there are
+        // tips, they travel as one block: page 1 if they fit, else a fresh page.
+        if (total > 0) {
+            doc.add(tipsBlock(cw, tipsFor(d)));
+        }
+
+        doc.close();
+    }
+
+    // ---- tips: same set and wording as the old report (only rendered when total > 0) ----
+    static String[][] tipsFor(Data d) {
+        List<String[]> t = new ArrayList<>();
+        if (d.nonYes > 0) t.add(new String[]{ "Use building=yes for all buildings",
+            "Unless the project instructions say otherwise or you have local knowledge of the area you are mapping." });
+        if (d.overlap > 0) t.add(new String[]{ "Don’t draw a new building overlapping an already existing one",
+            "Try to draw each building separately. Zoom in and look for outlines already drawn in the area "
+            + "before tracing a new one." });
+        if (d.onRoads > 0) t.add(new String[]{ "Do not draw buildings over highways",
+            "Building outlines should sit beside highways, not on top of them." });
+        if (d.nonOrtho > 0) t.add(new String[]{ "Square building corners after drawing",
+            "Press “Q” in your mapping editor after drawing a rectangular building outline to straighten "
+            + "the corners. If mapping in JOSM, use the buildings_tools plugin which draws rectangular buildings "
+            + "automatically." });
+        if (d.layerTag > 0) t.add(new String[]{ "Avoid using the layer tag on buildings",
+            "When iD editor warns about overlapping objects it suggests adding layer=*. The correct fix is to "
+            + "move the object instead so it does not overlap, not to add a layer tag." });
+        if (d.sharedNodes > 0) t.add(new String[]{ "Do not snap buildings to highways or other buildings",
+            "Each building should have its own independent nodes. In iD editor hold “Alt” (“Ctrl” "
+            + "in JOSM) to avoid snapping to existing nodes. If you accidentally connected nodes, use “D” in "
+            + "iD editor (“G” in JOSM) to unglue them and then adjust their position." });
+        if (d.untagged > 0) t.add(new String[]{ "Always add tags to the nodes and ways you draw",
+            "A node or way with no tags has no meaning in OpenStreetMap. If you drew a building outline, make sure "
+            + "to add building=yes before saving; if you placed a standalone node, tag it appropriately." });
+        return t.toArray(new String[0][]);
+    }
+
+    // =====================================================================
+    //  Building blocks
+    // =====================================================================
+
+    private static PdfPTable wrapCard(float width, PdfPTable inner, float padH, float padV, float spacingAfter) {
+        PdfPTable t = new PdfPTable(1);
+        t.setTotalWidth(width);
+        t.setLockedWidth(true);
+        t.setKeepTogether(true);
+        PdfPCell c = new PdfPCell();
+        c.setBorder(Rectangle.NO_BORDER);
+        c.setPaddingLeft(padH);
+        c.setPaddingRight(padH);
+        c.setPaddingTop(padV);
+        c.setPaddingBottom(padV);
+        c.setCellEvent(new RoundedBox(WHITE, HAIR, 9f, 0f, 0f, 0, null));
+        c.addElement(inner);
+        t.addCell(c);
+        t.setSpacingAfter(spacingAfter);
+        return t;
+    }
+
+    private static PdfPCell metaCell(String label, Phrase value) {
+        PdfPCell c = new PdfPCell();
+        c.setBorder(Rectangle.NO_BORDER);
+        c.setPaddingTop(1f);
+        c.setPaddingBottom(1f);
+        c.setPaddingRight(9f);
+        Chunk lc = new Chunk(label, f(N_XB, 7.3f, MUTE));
+        lc.setCharacterSpacing(1.1f);
+        Paragraph l = new Paragraph(lc);
+        l.setLeading(10f);
+        Paragraph v = new Paragraph(value);
+        v.setLeading(13f);
+        v.setSpacingBefore(3f);
+        c.addElement(l);
+        c.addElement(v);
+        return c;
+    }
+
+    private static PdfPCell summaryCell(int pct, Color numColor, String label, String sub,
+                                        Color pillBg, Color pillTx, Color accent, float insetL, float insetR) {
+        PdfPCell c = new PdfPCell();
+        c.setBorder(Rectangle.NO_BORDER);
+        c.setPaddingLeft(17f + insetL);
+        c.setPaddingRight(17f + insetR);
+        c.setPaddingTop(15f);
+        c.setPaddingBottom(13f);
+        c.setCellEvent(new RoundedBox(WHITE, HAIR, 9f, insetL, insetR, 1, accent));
+
+        Phrase big = new Phrase();
+        big.add(new Chunk(String.valueOf(pct), f(F_NUM, 30f, numColor)));
+        big.add(new Chunk("%", f(N_BOLD, 14.5f, numColor)));
+        if (sub != null) {
+            big.add(new Chunk("   ", f(N_REG, 8.4f, numColor)));
+            Chunk s = new Chunk(sub, f(N_BOLD, 8.4f, pillTx));
+            s.setBackground(pillBg, 5f, 2.5f, 5f, 3.5f);
+            s.setTextRise(6f);
+            big.add(s);
+        }
+        Paragraph b = new Paragraph(big);
+        b.setLeading(34f);
+
+        Paragraph l = new Paragraph(label, f(N_REG, 9.8f, MUTE_SOFT));
+        l.setLeading(13f);
+        l.setSpacingBefore(6f);
+        c.addElement(b);
+        c.addElement(l);
+        return c;
+    }
+
+    private static PdfPCell sectionHead(String title, String lede) {
+        PdfPCell c = new PdfPCell();
+        c.setBorder(Rectangle.NO_BORDER);
+        c.setPadding(0f);
+        Paragraph t = new Paragraph(title, f(F_HEAD, 14f, INK_HEAD));
+        t.setLeading(16.5f);
+        Paragraph l = new Paragraph(lede, f(N_REG, 9.5f, MUTE));
+        l.setLeading(12.5f);
+        l.setSpacingBefore(3f);
+        c.addElement(t);
+        c.addElement(l);
+        return c;
+    }
+
+    private static void row(PdfPTable t, Image tick, String check, int count, String note, boolean last) {
+        PdfPCell c1 = new PdfPCell(new Phrase(check, f(N_BOLD, 9.4f, INK)));
+        Phrase issues;
+        if (count == 0) {
+            issues = new Phrase();
+            issues.add(new Chunk(tick, 0f, -1.5f, false));
+            issues.add(new Chunk("  None", f(N_BOLD, 9.4f, GREEN_DK)));
+        } else {
+            issues = new Phrase(nf(count), f(N_BOLD, 9.6f, AMBER));
+        }
+        PdfPCell c2 = new PdfPCell(issues);
+        Paragraph np = new Paragraph(note, f(N_REG, 8.6f, MUTE));
+        np.setLeading(11.4f);
+        PdfPCell c3 = new PdfPCell();
+        c3.addElement(np);
+        for (PdfPCell c : new PdfPCell[]{ c1, c2, c3 }) {
+            c.setBackgroundColor(WHITE);
+            c.setBorder(last ? Rectangle.NO_BORDER : Rectangle.BOTTOM);
+            c.setBorderColorBottom(HAIR);
+            c.setBorderWidthBottom(0.7f);
+            c.setPaddingTop(8f);
+            c.setPaddingBottom(8f);
+            c.setPaddingLeft(9f);
+            c.setPaddingRight(6f);
+            c.setVerticalAlignment(Element.ALIGN_TOP);
+        }
+        t.addCell(c1);
+        t.addCell(c2);
+        t.addCell(c3);
+    }
+
+    private static PdfPTable recItem(float width, String title, String body) {
+        PdfPTable t = new PdfPTable(1);
+        t.setTotalWidth(width);
+        t.setLockedWidth(true);
+        t.setKeepTogether(true);
+        t.setSpacingAfter(6f);
+        PdfPCell c = new PdfPCell();
+        c.setBorder(Rectangle.NO_BORDER);
+        c.setPaddingLeft(16f);
+        c.setPaddingRight(15f);
+        c.setPaddingTop(10f);
+        c.setPaddingBottom(body == null ? 10f : 11f);
+        c.setCellEvent(new RoundedBox(WHITE, HAIR, 8f, 0f, 0f, 2, GREEN));
+        Paragraph tt = new Paragraph(title, f(N_BOLD, 10f, INK_HEAD));
+        tt.setLeading(13f);
+        c.addElement(tt);
+        if (body != null) {
+            Paragraph b = new Paragraph(body, f(N_REG, 8.9f, MUTE_SOFT));
+            b.setLeading(12.5f);
+            b.setSpacingBefore(2.5f);
+            c.addElement(b);
+        }
+        t.addCell(c);
+        return t;
+    }
+
+    /**
+     * The heading and every tip as one keep-together unit, so the section never
+     * splits mid-way and the heading is never orphaned from its tips: it stays on
+     * page 1 if it fits, otherwise the whole block moves to a fresh page.
+     */
+    private static PdfPTable tipsBlock(float width, String[][] tips) {
+        PdfPTable outer = new PdfPTable(1);
+        outer.setTotalWidth(width);
+        outer.setLockedWidth(true);
+        outer.setKeepTogether(true);
+        PdfPCell cell = new PdfPCell();
+        cell.setBorder(Rectangle.NO_BORDER);
+        cell.setPadding(0f);
+
+        PdfPTable head = new PdfPTable(1);
+        head.setWidthPercentage(100);
+        head.addCell(sectionHead("Handy tips for your next mapathon",
+                "Quick reminders to make next time even smoother — you’ve already got the hang of it."));
+        cell.addElement(wrapCard(width, head, 17f, 13f, 8f));
+
+        for (String[] tip : tips) cell.addElement(recItem(width, tip[0], tip[1]));
+        outer.addCell(cell);
+        return outer;
+    }
+
+    // =====================================================================
+    //  Helpers
+    // =====================================================================
+
+    private static Font f(BaseFont bf, float size, Color c) {
+        return new Font(bf, size, Font.NORMAL, c);
+    }
+
+    private static String nf(int n) {
+        return String.format(Locale.ROOT, "%,d", n);
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.trim().isEmpty();
+    }
+
+    /**
+     * The "WHEN" value. Same day -&gt; one compact line ("2026-09-02, 10:00-12:00 UTC").
+     * Different days -&gt; two lines so the narrow column never wraps mid-timestamp:
+     * "2026-09-01 16:00 -" / "2026-09-03 18:00 UTC".
+     */
+    private static Phrase whenPhrase(String start, String end, Font font) {
+        start = start.trim();
+        end = end == null ? "" : end.trim();
+        if (end.isEmpty()) {
+            return new Phrase(start + " UTC", font);
+        }
+        if (start.length() >= 16 && end.length() >= 16 && start.substring(0, 10).equals(end.substring(0, 10))) {
+            return new Phrase(start.substring(0, 10) + ", "
+                    + start.substring(11, 16) + "–" + end.substring(11, 16) + " UTC", font);
+        }
+        Phrase p = new Phrase();
+        p.add(new Chunk(start + " –", font));
+        p.add(Chunk.NEWLINE);
+        p.add(new Chunk(end + " UTC", font));
+        return p;
+    }
+
+    private static synchronized void loadFonts() throws IOException, DocumentException {
+        if (N_REG != null) return;
+        N_REG  = loadFont("Nunito-Regular.ttf");
+        N_SEMI = loadFont("Nunito-SemiBold.ttf");
+        N_BOLD = loadFont("Nunito-Bold.ttf");
+        N_XB   = loadFont("Nunito-ExtraBold.ttf");
+        F_HEAD = loadFont("Fraunces-Head.ttf");
+        F_NUM  = loadFont("Fraunces-Num.ttf");
+    }
+
+    /** The green "CHECK / ISSUES / NOTES" bar as an image (see call site for why). */
+    private static Image headerBar(PdfWriter writer, float width, float[] cols) throws DocumentException {
+        float h = 21f;
+        PdfTemplate tp = writer.getDirectContent().createTemplate(width, h);
+        tp.setColorFill(GREEN);
+        tp.roundRectangle(0f, 0f, width, h, 6.5f);
+        tp.fill();
+
+        float span = cols[0] + cols[1] + cols[2];
+        float x0 = 9f;
+        float x1 = width * cols[0] / span + 9f;
+        float x2 = width * (cols[0] + cols[1]) / span + 9f;
+        float y = (h - 7.8f) / 2f + 0.5f;
+
+        tp.beginText();
+        tp.setFontAndSize(N_XB, 7.8f);
+        tp.setColorFill(WHITE);
+        tp.setCharacterSpacing(1.1f);
+        tp.setTextMatrix(x0, y); tp.showText("CHECK");
+        tp.setTextMatrix(x1, y); tp.showText("ISSUES");
+        tp.setTextMatrix(x2, y); tp.showText("NOTES");
+        tp.endText();
+
+        return Image.getInstance(tp);
+    }
+
+    /** A small green check drawn as vector - no symbol font to depend on. */
+    private static Image checkMark(PdfWriter writer) throws DocumentException {
+        PdfTemplate t = writer.getDirectContent().createTemplate(9f, 8f);
+        t.setColorStroke(GREEN_DK);
+        t.setLineWidth(1.35f);
+        t.setLineCap(PdfContentByte.LINE_CAP_ROUND);
+        t.setLineJoin(PdfContentByte.LINE_JOIN_ROUND);
+        t.moveTo(0.8f, 4.1f);
+        t.lineTo(3.3f, 1.4f);
+        t.lineTo(8.2f, 7.4f);
+        t.stroke();
+        Image img = Image.getInstance(t);
+        img.scaleToFit(9f, 8f);
+        return img;
+    }
+
+    private static BaseFont loadFont(String name) throws IOException, DocumentException {
+        byte[] bytes = resourceBytes("/fonts/" + name);
+        return BaseFont.createFont(name, BaseFont.IDENTITY_H, BaseFont.EMBEDDED, true, bytes, null);
+    }
+
+    private static Image image(String path) throws IOException {
+        try {
+            return Image.getInstance(resourceBytes(path));
+        } catch (com.lowagie.text.BadElementException e) {
+            throw new IOException("Bad bundled image " + path + ": " + e.getMessage(), e);
+        }
+    }
+
+    private static byte[] resourceBytes(String path) throws IOException {
+        try (InputStream in = ReportWriter.class.getResourceAsStream(path)) {
+            if (in == null) throw new IOException("Bundled resource not found: " + path);
+            return in.readAllBytes();
+        }
     }
 
     static File resolveOutputDir() {
@@ -210,14 +620,113 @@ public class ReportWriter {
         return outDir;
     }
 
-    private static void row(BufferedWriter w, String check, int count, String notes) throws IOException {
-        String cls = count == 0 ? "count-ok" : "count-warn";
-        String countStr = count == 0 ? "&#10003; None" : String.valueOf(count);
-        w.write("<tr><td>" + esc(check) + "</td><td class=\'" + cls + "\'>" + countStr + "</td><td class=\'note\'>" + esc(notes) + "</td></tr>\n");
-    }
-
+    /** HTML-escape - still used by the Swing result dialogs in RunQAOnCurrentLayerAction. */
     static String esc(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+    }
+
+    // =====================================================================
+    //  PDF canvas pieces
+    // =====================================================================
+
+    /** Rounded-rectangle cell background, with an optional top (1) or left (2) accent bar. */
+    private static final class RoundedBox implements PdfPCellEvent {
+        private final Color fill, stroke, accent;
+        private final float radius, insetL, insetR;
+        private final int accentSide;
+
+        RoundedBox(Color fill, Color stroke, float radius, float insetL, float insetR, int accentSide, Color accent) {
+            this.fill = fill;
+            this.stroke = stroke;
+            this.radius = radius;
+            this.insetL = insetL;
+            this.insetR = insetR;
+            this.accentSide = accentSide;
+            this.accent = accent;
+        }
+
+        @Override
+        public void cellLayout(PdfPCell cell, Rectangle pos, PdfContentByte[] cv) {
+            PdfContentByte cb = cv[PdfPTable.BACKGROUNDCANVAS];
+            float x = pos.getLeft() + insetL;
+            float y = pos.getBottom();
+            float w = pos.getWidth() - insetL - insetR;
+            float h = pos.getHeight();
+            cb.saveState();
+
+            cb.setColorFill(fill);
+            cb.roundRectangle(x, y, w, h, radius);
+            cb.fill();
+
+            if (accent != null && accentSide != 0) {
+                cb.saveState();
+                cb.roundRectangle(x, y, w, h, radius);
+                cb.clip();
+                cb.newPath();
+                cb.setColorFill(accent);
+                if (accentSide == 1) {
+                    cb.rectangle(x, y + h - 4f, w, 4f);
+                } else {
+                    cb.rectangle(x, y, 3.6f, h);
+                }
+                cb.fill();
+                cb.restoreState();
+            }
+
+            if (stroke != null) {
+                cb.setColorStroke(stroke);
+                cb.setLineWidth(0.75f);
+                cb.roundRectangle(x, y, w, h, radius);
+                cb.stroke();
+            }
+            cb.restoreState();
+        }
+    }
+
+    /** Paints the warm page ground and the centred footer on every page. */
+    private static final class Chrome extends PdfPageEventHelper {
+        private final String generated;
+
+        Chrome(String generated) {
+            this.generated = generated;
+        }
+
+        @Override
+        public void onStartPage(PdfWriter writer, Document doc) {
+            PdfContentByte cb = writer.getDirectContentUnder();
+            Rectangle ps = doc.getPageSize();
+            cb.saveState();
+            cb.setColorFill(CREAM);
+            cb.rectangle(0, 0, ps.getWidth(), ps.getHeight());
+            cb.fill();
+            cb.restoreState();
+        }
+
+        @Override
+        public void onEndPage(PdfWriter writer, Document doc) {
+            PdfContentByte cb = writer.getDirectContent();
+            Rectangle ps = doc.getPageSize();
+            float cx = ps.getWidth() / 2f;
+
+            cb.saveState();
+            cb.setColorStroke(HAIR);
+            cb.setLineWidth(0.75f);
+            cb.moveTo(cx - 80f, 42f);
+            cb.lineTo(cx + 80f, 42f);
+            cb.stroke();
+            cb.restoreState();
+
+            Phrase p1 = new Phrase();
+            p1.add(new Chunk("With thanks from ", f(N_REG, 8.3f, MUTE)));
+            Chunk mm = new Chunk("Missing Maps", f(N_BOLD, 8.3f, GREEN));
+            mm.setAnchor("https://www.missingmaps.org");
+            p1.add(mm);
+            p1.add(new Chunk("  —  keep mapping!", f(N_REG, 8.3f, MUTE)));
+            ColumnText.showTextAligned(cb, Element.ALIGN_CENTER, p1, cx, 31f, 0);
+            ColumnText.showTextAligned(cb, Element.ALIGN_CENTER,
+                    new Phrase("Generated " + generated + " (UTC)", f(N_REG, 7.5f, new Color(0x9A, 0x93, 0x88))),
+                    cx, 21f, 0);
+        }
     }
 }

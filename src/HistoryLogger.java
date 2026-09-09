@@ -13,7 +13,7 @@ import java.util.TimeZone;
 /**
  * Appends one row per real QA run to a single persistent CSV file, so mapathon
  * organisers can track data quality trends across mapathons over time in
- * Excel/Sheets. Lives in the same folder as HTML reports (see ReportWriter);
+ * Excel/Sheets. Lives in the same folder as the PDF reports (see ReportWriter);
  * the same file is reused/appended to on every run, never overwritten.
  * Opt-in via the Step 1 checkbox (see PREF_INCLUDE_HISTORY) - off by default.
  */

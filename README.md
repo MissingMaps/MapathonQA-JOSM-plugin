@@ -1,6 +1,6 @@
 # MapathonQA – JOSM Plugin
 
-Post-mapathon data quality checker. The goal of this plugin is to give a quick, rough overview of the data quality output after a mapathon and create a report that can be shared with mapathon organisers/trainers so they are aware which issues they should highlight next time during training. [Here is an example how the report looks like](https://missingmaps.org/DEMOreport/).
+Post-mapathon data quality checker. The goal of this plugin is to give a quick, rough overview of the data quality output after a mapathon and create a PDF report that can be shared with mapathon organisers/trainers so they are aware which issues they should highlight next time during training.
 
 "Run QA & Generate Report" detects only objects created/modified during the mapathon's time window, as defined in "Find Mapathon Tasks...". If no time window defined (skipped Step 1) then it detects all objects. The Individual Checks submenu detects all objects as well.
 
@@ -15,14 +15,14 @@ Video tutorial: [How to use the MapathonQA plugin](https://youtu.be/k_rTlTLqS7I)
 2. Load the task grid into JOSM — happens automatically on **Close & Continue** if you leave the checkbox ticked.
 3. **Edit → Search (Ctrl+F)**, paste the copied search query to select the tasks touched during the mapathon's time window
 4. Download OSM data for the selected tasks using File → **Download Along...**
-5. **MapathonQA → Run QA & Generate Report** — runs the 7 checks against the downloaded data, <ins>restricted to the mapathon's time window</ins>. Flagged objects are selected in the editor, an HTML report is generated, and (if enabled in Step 1) a row is appended to the history CSV file.
-6. Review the flagged selection in JOSM, and share the HTML report with organisers/trainers.
+5. **MapathonQA → Run QA & Generate Report** — runs the 7 checks against the downloaded data, <ins>restricted to the mapathon's time window</ins>. Flagged objects are selected in the editor, a PDF report is generated, and (if enabled in Step 1) a row is appended to the history CSV file.
+6. Review the flagged selection in JOSM, and share the PDF report with organisers/trainers.
 
 Other entry points from the menu:
-- **Set Report Save Folder...** — choose where reports and the history CSV are saved; if unset, falls back to your Downloads folder, then Desktop, then the home folder.
+- **Set Report Save Folder...** — choose where the PDF reports and the history CSV are saved; if unset, falls back to your Downloads folder, then Desktop, then the home folder.
 - **Individual Checks submenu** — run any of the 7 report checks standalone against the whole current layer <ins>with no time filter</ins>
 
-Want to see what a report looks like before running the plugin? See the sample at https://missingmaps.org/DEMOreport/.
+The report is a single self-contained PDF — fonts and the Missing Maps logo are embedded, so it renders identically offline on any viewer and previews inline when shared over Slack, email or chat. Two pages at most: page 1 is "how it went" (summary + the seven checks), and when something is flagged the "handy tips" start on page 2. A clean run is one page.
 
 ## Credits
 
@@ -61,8 +61,8 @@ All items in the submenu run with no time filter, independent of the full QA Che
 |---|---|
 | `MapathonQAPlugin.java` | Entry point, builds menu (see Menu structure below) |
 | `RunFullQAAction.java` | Wizard: HOT TM API → task IDs → JOSM search query |
-| `RunQAOnCurrentLayerAction.java` | Runs all 7 checks with progress dialog, generates report |
-| `SetReportFolderAction.java` | Lets the user override where HTML reports are saved (JOSM preference `mapathonqa.reportDir`) |
+| `RunQAOnCurrentLayerAction.java` | Runs all 7 checks with progress dialog, generates the PDF report |
+| `SetReportFolderAction.java` | Lets the user override where PDF reports are saved (JOSM preference `mapathonqa.reportDir`) |
 | `HistoryLogger.java` | Appends one row per real QA run to a persistent `MapathonQA_history.csv` for tracking quality trends over time — opt-in, off by default |
 | `CheckNonYesBuildingTagsAction.java` | Check 1: building ≠ yes (menu: "Select Non-yes Building Tags") |
 | `CheckOverlappingBuildingsAction.java` | Check 2: overlapping/contained buildings (matches JOSM's own built-in validator classification — see below), including exact-duplicate ways (`GeometryUtil.isExactDuplicate`) (menu: "Select Overlapping Buildings") |
@@ -73,7 +73,7 @@ All items in the submenu run with no time filter, independent of the full QA Che
 | `CheckUntaggedWaysAction.java` | Check 7: untagged objects — ways, plus standalone untagged nodes not used as a way vertex (multipolygon members excluded) (menu: "Select Untagged Objects") |
 | `GeometryUtil.java` | Ray-casting, segment intersection, exact-duplicate detection, time filter, building-overlap classification via JOSM's own `Geometry.polygonIntersection` |
 | `QAResults.java` | Data container for all check results |
-| `ReportWriter.java` | Generates branded HTML report (MM logo embedded as base64 SVG) |
+| `ReportWriter.java` | Renders the branded PDF report via OpenPDF; extracts a plain `Data` struct from `QAResults`, then draws the card layout with bundled Nunito + Fraunces fonts and the MM logo |
 
 ## HOT TM API
 
@@ -83,3 +83,28 @@ GET https://tasking-manager-production-api.hotosm.org/api/v2/projects/{ID}/activ
 
 Returns latest action per task. Plugin filters by `actionDate` within the time window.
 All taskStatus values included (MAPPED, VALIDATED, INVALIDATED, BADIMAGERY, READY).
+
+## Building
+
+```
+./build.sh      # macOS / Linux
+build.bat       # Windows
+```
+
+Needs a JDK 17+ on `PATH`. `lib/josm-tested.jar` (gitignored) must be downloaded
+from <https://josm.openstreetmap.de/josm-tested.jar>. On the first build, OpenPDF
+is fetched into `lib/` from Maven Central and unpacked into `MapathonQA.jar` — JOSM
+plugins are self-contained, so the finished jar (~2.4 MB) carries OpenPDF plus the
+embedded fonts and logo. If Maven Central is unreachable, drop
+`openpdf-1.3.30.jar` into `lib/` by hand.
+
+## Third-party components
+
+| Component | License | Use |
+|---|---|---|
+| [OpenPDF](https://github.com/LibrePDF/OpenPDF) 1.3.30 | LGPL-2.1 / MPL-2.0 | PDF generation (bundled in the plugin jar) |
+| [Nunito](https://github.com/googlefonts/nunito) | SIL OFL 1.1 | Report body text (bundled, Latin subset — see `fonts/README.txt`) |
+| [Fraunces](https://github.com/undercasetype/Fraunces) | SIL OFL 1.1 | Report headings and stat numbers (bundled) |
+
+The plugin itself is GPL-3.0 (`LICENSE`); all three are GPL-compatible and are
+redistributed unmodified. Font license texts live in `fonts/`.
