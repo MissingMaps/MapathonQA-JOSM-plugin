@@ -33,7 +33,7 @@ public class MapathonQAPlugin extends Plugin {
             I18n.tr("MapathonQA"), I18n.tr("MapathonQA"), 0,
             menu.getDefaultMenuPos(), HelpUtil.ht("Plugin/MapathonQA"));
 
-        menuRoot.add(new JMenuItem(new RunFullQAAction()));
+        menuRoot.add(new JMenuItem(new GenerateMapathonReportAction()));
         menuRoot.add(new JMenuItem(new RunQAOnCurrentLayerAction()));
         menuRoot.addSeparator();
         menuRoot.add(new JMenuItem(new SetReportFolderAction()));

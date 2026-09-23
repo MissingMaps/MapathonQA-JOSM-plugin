@@ -36,10 +36,10 @@ import org.openstreetmap.josm.tools.OpenBrowser;
 public class RunQAOnCurrentLayerAction extends AbstractAction {
 
     public RunQAOnCurrentLayerAction() {
-        super(I18n.tr("Run QA & Generate Report"));
-        putValue(SHORT_DESCRIPTION, I18n.tr("Runs the 7 checks against the current layer and generates the PDF "
-            + "report. Works on its own, but if you ran ''Find Mapathon Tasks...'' first, results are restricted "
-            + "to the mapathon''s time window."));
+        super(I18n.tr("Run QA on Current Layer"));
+        putValue(SHORT_DESCRIPTION, I18n.tr("Re-runs the 7 checks against the current layer and generates the PDF "
+            + "report, without downloading anything. If you ran ''Generate Mapathon Report...'' first, results are "
+            + "restricted to that mapathon''s time window."));
     }
 
     @Override
@@ -55,11 +55,8 @@ public class RunQAOnCurrentLayerAction extends AbstractAction {
         if (ds == null) {
             JOptionPane.showMessageDialog(null,
                 "No active OSM data layer found.\n\n"
-                + "Please download OSM data first:\n"
-                + "1. Load the task grid into JOSM\n"
-                + "2. Use the search query from 'Find Mapathon Tasks...' to select tasks\n"
-                + "3. Download OSM data for the selected area\n"
-                + "4. Then run this check",
+                + "Please download OSM data first, e.g. via 'Generate Mapathon Report...', "
+                + "then run this check.",
                 "MapathonQA", JOptionPane.WARNING_MESSAGE);
             return;
         }

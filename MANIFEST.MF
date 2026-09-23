@@ -5,4 +5,4 @@ Plugin-Icon: images/MM_logo_circle.png
 Plugin-Link: https://github.com/MissingMaps/MapathonQA-JOSM-plugin
 Plugin-Mainversion: 19555
 Plugin-Minimum-Java-Version: 17
-Plugin-Version: v1.1.0
+Plugin-Version: v1.2.0

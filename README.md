@@ -2,23 +2,22 @@
 
 Post-mapathon data quality checker. The goal of this plugin is to give a quick, rough overview of the data quality output after a mapathon and create a PDF report that can be shared with mapathon organisers/trainers so they are aware which issues they should highlight next time during training.
 
-"Run QA & Generate Report" detects only objects created/modified during the mapathon's time window, as defined in "Find Mapathon Tasks...". If no time window defined (skipped Step 1) then it detects all objects. The Individual Checks submenu detects all objects as well.
+The report detects only objects created/modified during the mapathon's time window. "Run QA on Current Layer" uses the time window from the last "Generate Mapathon Report..." run; if there is none, it detects all objects. The Individual Checks submenu detects all objects as well.
 
 Video tutorial: [How to use the MapathonQA plugin](https://youtu.be/k_rTlTLqS7I)
 
 ## Workflow
 
-1. **MapathonQA → Find Mapathon Tasks...**
-   - **Step 1 – Project & Time Window:** enter the mapathon name (optional), the HOT Tasking Manager project ID and the mapathon's UTC time window (defaults to the last 2 hours). Optionally tick "Include this report in MapathonQA_history.csv" to log the results in an Excel file for future tracking and comparing with later mapathons.
-   - Click **Find Mapathon Tasks →**. The plugin queries the HOT TM API for all tasks touched in that time window and builds a JOSM search query matching them.
-   - **Step 2 – Load & Select Tasks:** Click "Copy Search Query to Clipboard".
-2. Load the task grid into JOSM — happens automatically on **Close & Continue** if you leave the checkbox ticked.
-3. **Edit → Search (Ctrl+F)**, paste the copied search query to select the tasks touched during the mapathon's time window
-4. Download OSM data for the selected tasks using File → **Download Along...**
-5. **MapathonQA → Run QA & Generate Report** — runs the 7 checks against the downloaded data, <ins>restricted to the mapathon's time window</ins>. Flagged objects are selected in the editor, a PDF report is generated, and (if enabled in Step 1) a row is appended to the history CSV file.
-6. Review the flagged selection in JOSM, and share the PDF report with organisers/trainers.
+1. **MapathonQA → Generate Mapathon Report...**
+   - Enter the mapathon name (optional), the HOT Tasking Manager project ID and the mapathon's UTC time window (defaults to the last 2 hours). Optionally tick "Include this report in MapathonQA_history.csv" to log the results in an Excel file for future tracking and comparing with later mapathons.
+   - Click **Generate Report →**. Everything else is automatic:
+     1. The plugin queries the HOT TM API for all tasks touched in that time window.
+     2. It fetches each task's boundary and downloads the OSM data for every task, one by one, into a new layer ("MapathonQA – *mapathon name*"). **Cancel** (or Esc) in the progress window stops the run; whatever was already downloaded stays in the layer. If some tasks fail to download, the plugin lists their task IDs (selectable, so you can copy them) and asks whether to generate the report from the rest anyway.
+     3. It runs the 7 checks against the downloaded data, <ins>restricted to the mapathon's time window</ins>. Flagged objects are selected in the editor, a PDF report is generated, and (if enabled) a row is appended to the history CSV file.
+2. Review the flagged selection in JOSM, and share the PDF report with organisers/trainers.
 
 Other entry points from the menu:
+- **Run QA on Current Layer** — re-runs the checks and regenerates the report on the active layer without downloading anything (e.g. after fixing some issues, or on data you downloaded yourself).
 - **Set Report Save Folder...** — choose where the PDF reports and the history CSV are saved; if unset, falls back to your Downloads folder, then Desktop, then the home folder.
 - **Individual Checks submenu** — run any of the 7 report checks standalone against the whole current layer <ins>with no time filter</ins>
 
@@ -38,8 +37,8 @@ implementation, and debugging.
 
 ```
 MapathonQA
-├── Find Mapathon Tasks...
-├── Run QA & Generate Report
+├── Generate Mapathon Report...
+├── Run QA on Current Layer
 ├── ───────────────
 ├── Set Report Save Folder...
 ├── ───────────────
@@ -60,7 +59,7 @@ All items in the submenu run with no time filter, independent of the full QA Che
 | File | Purpose |
 |---|---|
 | `MapathonQAPlugin.java` | Entry point, builds menu (see Menu structure below) |
-| `RunFullQAAction.java` | Wizard: HOT TM API → task IDs → JOSM search query |
+| `GenerateMapathonReportAction.java` | One-click pipeline: HOT TM API → task IDs in the time window → task boundaries → per-task download into a new layer → runs the QA |
 | `RunQAOnCurrentLayerAction.java` | Runs all 7 checks with progress dialog, generates the PDF report |
 | `SetReportFolderAction.java` | Lets the user override where PDF reports are saved (JOSM preference `mapathonqa.reportDir`) |
 | `HistoryLogger.java` | Appends one row per real QA run to a persistent `MapathonQA_history.csv` for tracking quality trends over time — opt-in, off by default |
@@ -83,6 +82,14 @@ GET https://tasking-manager-production-api.hotosm.org/api/v2/projects/{ID}/activ
 
 Returns latest action per task. Plugin filters by `actionDate` within the time window.
 All taskStatus values included (MAPPED, VALIDATED, INVALIDATED, BADIMAGERY, READY).
+Tasks mapped during the mapathon but later re-validated or invalidated may show a later date and fall outside the window.
+
+```
+GET https://tasking-manager-production-api.hotosm.org/api/v2/projects/{ID}/tasks/
+```
+
+Returns the task grid as GeoJSON. Each matched task's polygon is reduced to its bounding box, and each box is
+downloaded from the OSM API separately. There is no buffer; the API still returns ways that cross the box edge complete.
 
 ## Building
 

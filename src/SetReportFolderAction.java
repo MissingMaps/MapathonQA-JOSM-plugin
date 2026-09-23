@@ -32,7 +32,7 @@ public class SetReportFolderAction extends AbstractAction {
         dlg.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dlg.setSize(520, 210);
         dlg.setLocationRelativeTo(null);
-        RunFullQAAction.bindEscapeToClose(dlg);
+        GenerateMapathonReportAction.bindEscapeToClose(dlg);
 
         JPanel main = new JPanel(new GridBagLayout());
         main.setBorder(BorderFactory.createEmptyBorder(16, 20, 8, 20));
